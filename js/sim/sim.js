@@ -266,8 +266,9 @@ export class Sim {
     const atm = this.atm;
     this.vt++;
 
-    this.w = cfg.source === 'dsp' ? ch.wDsp : ch.wKf;
-    this.sig = cfg.source === 'dsp' ? 0.45 : ch.sigKf;
+    const SRC = { dsp: ch.wDsp, kf: ch.wKf, kf5: ch.wKf5, en: ch.wEn, enA: ch.wEnA, comp: ch.wComp };
+    this.w = SRC[cfg.source] ?? ch.wKf;
+    this.sig = cfg.source === undefined || cfg.source === 'kf' || cfg.source === 'kf5' ? ch.sigKf : 0.45;
     this.wDot += (((this.w - this.wPrev) / dt - this.wDot) * dt) / 1.5;
     this.wPrev = this.w;
 
@@ -289,7 +290,7 @@ export class Sim {
 
     const cmd = gd.update(dt, this.ctx());
     g.phiCmd = cmd.phi;
-    g.Vcmd = cmd.V;
+    g.Vcmd = cfg.speedDoublet ? cmd.V + cfg.speedDoublet * Math.sign(Math.sin((2 * Math.PI * this.t) / 40)) : cmd.V;
     g.motor = cmd.motor;
 
     // ---- scoring against truth ----

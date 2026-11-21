@@ -269,7 +269,7 @@ export class VarioChain {
     this.vc = 0;
     this.axLp = 0;
     this.vtPrev = null;
-    this.wEn = this.wEnA = this.wComp = this.wKf5 = this.wKfL = this.wKf5L = this.wKfS = 0;
+    this.wEn = this.wEnA = this.wComp = this.wKf5 = this.wKfL = this.wKf5L = this.wKfS = this.wKf5S = 0;
     this.sch = 0;
     this.akf.reset(g.V);
     this.nav.reset(g.x, g.y, g.chi);
@@ -346,6 +346,7 @@ export class VarioChain {
     const tgt = clamp((Math.abs(a) - this.sA0) / (this.sA1 - this.sA0), 0, 1);
     this.sch = Math.max(tgt, this.sch * Math.exp(-dt / this.sHold));
     this.wKfS = this.wKf + this.sch * (this.wKfL - this.wKf);
+    this.wKf5S = this.wKf5 + this.sch * (this.wKf5L - this.wKf5); // same blend with the drift-rate Kalman filter
 
     // D — energy-rate Kalman filter on E = h + V^2/2g; the polar supplies the drag term
     const Vs = Math.max(6, this.Vlp);

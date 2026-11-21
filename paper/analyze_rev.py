@@ -3,8 +3,7 @@ import json, numpy as np, sys
 from collections import defaultdict
 from scipy import signal as sg
 
-import pathlib
-R = str(pathlib.Path(__file__).resolve().parent / 'results') + '/'
+R = 'E:/AeroSoar/paper/results/'
 L = lambda n: json.load(open(R + n))
 rng = np.random.default_rng(1)
 out = {}

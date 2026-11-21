@@ -78,14 +78,14 @@ export class VerticalKF extends KF {
     this.x.set([h0, 0, 0, 0]);
     this.setDiag([9, 4, 0.02, 4]);
   }
-  predict(az, dt) {
+  predict(az, dt, extraVar = 0) {
     const x = this.x;
     const a = az - x[2];
     x[0] += x[1] * dt + 0.5 * a * dt * dt;
     x[1] += a * dt;
     const h2 = 0.5 * dt * dt;
     const F = [1, dt, -h2, 0, 0, 1, -dt, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    const sa2 = 0.2 * 0.2;
+    const sa2 = 0.2 * 0.2 + extraVar;
     const Q = new Float64Array(16);
     Q[0] = h2 * h2 * sa2;
     Q[1] = Q[4] = h2 * dt * sa2;
@@ -108,6 +108,72 @@ export class VerticalKF extends KF {
   }
   get varVz() {
     return this.P[5];
+  }
+}
+
+/** Vertical channel with an extra barometer drift-rate state: [h, vz, accel bias, baro offset, baro offset rate]. */
+export class VerticalKF5 extends KF {
+  constructor() {
+    super(5);
+    this.reset(0);
+  }
+  reset(h0) {
+    this.qb = this.qb ?? 0.05;
+    this.qr = this.qr ?? 0.003;
+    this.x.set([h0, 0, 0, 0, 0]);
+    this.setDiag([9, 4, 0.02, 4, 0.01]);
+  }
+  predict(az, dt, extraVar = 0) {
+    const x = this.x;
+    const a = az - x[2];
+    x[0] += x[1] * dt + 0.5 * a * dt * dt;
+    x[1] += a * dt;
+    x[3] += x[4] * dt;
+    const h2 = 0.5 * dt * dt;
+    const F = new Float64Array(25);
+    for (let i = 0; i < 5; i++) F[i * 5 + i] = 1;
+    F[1] = dt; F[2] = -h2; F[7] = -dt; F[19] = dt;
+    const sa2 = 0.2 * 0.2 + extraVar;
+    const Q = new Float64Array(25);
+    Q[0] = h2 * h2 * sa2;
+    Q[1] = Q[5] = h2 * dt * sa2;
+    Q[6] = dt * dt * sa2;
+    Q[12] = 0.003 * 0.003 * dt;
+    Q[18] = this.qb * this.qb * dt;
+    Q[24] = this.qr * this.qr * dt;
+    this.propagate(F, Q);
+  }
+  baro(z) {
+    return this.update(z, this.x[0] + this.x[3], [1, 0, 0, 1, 0], (NOISE.baro * 1.3) ** 2);
+  }
+  gnssAlt(z) {
+    return this.update(z, this.x[0], [1, 0, 0, 0, 0], NOISE.gnssH ** 2);
+  }
+  get vz() {
+    return this.x[1];
+  }
+  get varVz() {
+    return this.P[6];
+  }
+}
+
+/** Energy-rate Kalman filter: state [E, dE/dt] with E = h + V^2/2g, measured directly; no separate speed-rate estimate. */
+export class EnergyKF extends KF {
+  constructor() {
+    super(2);
+    this.reset(0);
+  }
+  reset(e0) {
+    this.qe = this.qe ?? 0.6;
+    this.x.set([e0, 0]);
+    this.setDiag([9, 1]);
+  }
+  step(zE, R, dt) {
+    const x = this.x;
+    x[0] += x[1] * dt;
+    const q = this.qe * this.qe;
+    this.propagate([1, dt, 0, 1], [(q * dt ** 3) / 3, (q * dt * dt) / 2, (q * dt * dt) / 2, q * dt]);
+    this.update(zE, x[0], [1, 0], R);
   }
 }
 
@@ -165,12 +231,18 @@ export class VarioChain {
   /** Optional overrides: {qb, qj, gnss, comp}. Called by the simulator; defaults reproduce the earlier behaviour. */
   configure(o = {}) {
     this.vkf.qb = o.qb ?? 0.05;
+    this.vkf5.qb = o.qb ?? 0.05;
+    this.vkf5.qr = o.qr ?? 0.003;
+    this.enkf.qe = o.qe ?? 0.6;
+    this.tiltQ = o.tiltQ === true;
     this.akf.qj = o.qj ?? 0.25;
     this.useGnssAlt = o.gnss !== false;
     this.nav.compensate = o.comp !== false;
   }
   constructor() {
     this.vkf = new VerticalKF();
+    this.vkf5 = new VerticalKF5();
+    this.enkf = new EnergyKF();
     this.akf = new AirspeedKF();
     this.nav = new Nav();
     this.setFilter('butter', 0.4);
@@ -180,10 +252,17 @@ export class VarioChain {
     this.fc = fc;
     this.lp = makeFilter(type, fc, RATES.baro);
     this.lp2 = makeFilter(type, fc, RATES.baro); // ablation channel without total-energy compensation
+    this.lp3 = makeFilter(type, fc, RATES.baro); // speed-term channel of the complementary pipeline
     this.delay = this.lp.delay;
   }
   reset(g) {
     this.vkf.reset(g.h);
+    this.vkf5.reset(g.h);
+    this.enkf.reset(g.h + (g.V * g.V) / (2 * G));
+    this.vc = 0;
+    this.axLp = 0;
+    this.vtPrev = null;
+    this.wEn = this.wEnA = this.wComp = this.wKf5 = 0;
     this.akf.reset(g.V);
     this.nav.reset(g.x, g.y, g.chi);
     this.setFilter(this.filterType, this.fc);
@@ -195,7 +274,11 @@ export class VarioChain {
     this.sigKf = 1;
   }
   onImu(m, dt) {
-    this.vkf.predict(m.az, dt);
+    const ex = this.tiltQ ? (G * Math.tan(this.nav.phi) * 0.0175) ** 2 : 0; // attitude-error allowance in turns (1 deg)
+    this.vkf.predict(m.az, dt, ex);
+    this.vkf5.predict(m.az, dt, ex);
+    this.vc += m.az * dt; // complementary climb rate: integrate the acceleration, the barometer corrects it in onBaro
+    if (m.ax !== undefined) this.axLp += (1 - Math.exp(-dt / 0.8)) * (m.ax - this.axLp);
   }
   onAhrs(m) {
     this.nav.phi = m.phi;
@@ -203,12 +286,12 @@ export class VarioChain {
   }
   onPitot(m) {
     this.Vraw = m.V;
-    this.Vlp += 0.22 * (m.V - this.Vlp); // ~1 Hz one-pole
+    this.Vlp += (RATES.pitot === 25 ? 0.22 : 1 - Math.exp((-2 * Math.PI) / RATES.pitot)) * (m.V - this.Vlp); // ~1 Hz one-pole
     this.akf.step(m.V, 1 / RATES.pitot);
     this.nav.V = this.akf.x[0];
   }
   onGnss(m, t) {
-    if (this.useGnssAlt !== false) this.vkf.gnssAlt(m.h);
+    if (this.useGnssAlt !== false) { this.vkf.gnssAlt(m.h); this.vkf5.gnssAlt(m.h); }
     this.nav.gnss(m, t);
   }
   /**
@@ -222,6 +305,7 @@ export class VarioChain {
     const k = 1 + polarErr;
     const thrust = motor ? (AC.motorEta * AC.motorP) / (AC.m * G) : 0;
     this.vkf.baro(m.h);
+    this.vkf5.baro(m.h);
 
     // A — naive: differentiate barometric altitude, add the sink polar. No energy compensation, no filter.
     const hd = this.zPrev === null ? 0 : (m.h - this.zPrev) / dt;
@@ -242,6 +326,24 @@ export class VarioChain {
     this.wKf = this.vkf.vz + (V * a) / G + dragSink(V, phi) * k - thrust;
     const varW = this.vkf.varVz + (V / G) ** 2 * this.akf.P[3] + 0.08 * 0.08;
     this.sigKf = Math.sqrt(Math.max(1e-4, varW));
+
+    // C5 — as C, with a barometer drift-rate state
+    this.wKf5 = this.vkf5.vz + (V * a) / G + dragSink(V, phi) * k - thrust;
+
+    // D — energy-rate Kalman filter on E = h + V^2/2g; the polar supplies the drag term
+    const Vs = Math.max(6, this.Vlp);
+    const Rn = (NOISE.baro * 1.3) ** 2 + ((Vs / G) * 0.09) ** 2;
+    this.enkf.step(eh, Rn, dt);
+    this.wEn = this.enkf.x[1] + dragSink(Vs, phi) * k - thrust;
+    // D2 — same, but the drag term comes from the longitudinal accelerometer: w = dE/dt - V fx / g (no polar, no thrust model)
+    this.wEnA = this.enkf.x[1] - (Vs * this.axLp) / G;
+
+    // E — complementary climb-rate filter (acceleration + differenced barometer) plus the low-passed total-energy term
+    this.vc += (1 - Math.exp(-2 * Math.PI * this.fc * dt)) * (hd - this.vc);
+    const vTerm = (Vs * Vs) / (2 * G);
+    const dV = this.vtPrev === null ? 0 : (vTerm - this.vtPrev) / dt;
+    this.vtPrev = vTerm;
+    this.wComp = this.vc + this.lp3.step(dV) + dragSink(Vs, phi) * k - thrust;
   }
 }
 
@@ -257,20 +359,22 @@ export class Cusum {
     this.reset();
     this.base = 0;
     this.gust = 0.2;
+    // gust-adaptation constants (defaults of the paper; exposed for the sensitivity study)
+    this.ak = 0.7; this.ah = 1.2; this.ag = 1.25; this.tb = 6; this.tg = 25;
   }
   reset() {
     this.g = 0;
   }
   get k() {
-    return this.k0 + 0.7 * this.gust;
+    return this.k0 + this.ak * this.gust;
   }
   get h() {
-    return this.h0 * (1 + 1.2 * this.gust);
+    return this.h0 * (1 + this.ah * this.gust);
   }
   /** armed=false still tracks the gust level but cannot alarm. */
   step(w, dt, armed = true) {
-    this.base += ((w - this.base) * dt) / 6;
-    this.gust += ((1.25 * Math.abs(w - this.base) - this.gust) * dt) / 25;
+    this.base += ((w - this.base) * dt) / this.tb;
+    this.gust += ((this.ag * Math.abs(w - this.base) - this.gust) * dt) / this.tg;
     if (!armed) {
       this.g = 0;
       return false;

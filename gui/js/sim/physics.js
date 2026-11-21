@@ -73,6 +73,7 @@ export class Glider {
     const CD = AC.CD0 + AC.k * CL * CL;
     const L = q * S * CL;
     const D = q * S * CD;
+    this.fx = (T - D) / m; // along-track specific force (what a longitudinal accelerometer senses)
     this.CL = CL;
 
     // air-relative point-mass dynamics (wind-gradient terms neglected, see RESEARCH_PLAN §4)

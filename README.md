@@ -19,11 +19,13 @@ Node.js 18 or later (for the simulator and experiments) and Python 3.10 or later
 
 ## Running the simulator
 
+**Live demonstration (no installation):** https://aishadin330-glitch.github.io/Aerosoar/
+
 ```bash
 python -m http.server 8010 --directory gui --bind 127.0.0.1
 ```
 
-Open http://localhost:8010 and select **Start**. A quick check without a browser:
+Open the address `http://localhost:8010` in a browser (it exists only on your own computer while this command is running) and select **Start**. A quick check without a browser:
 
 ```bash
 node gui/tests/headless.mjs 45

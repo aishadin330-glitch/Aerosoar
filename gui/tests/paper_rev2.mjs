@@ -102,7 +102,7 @@ if (mode === 'pipelines') {
     for (const seed of SEEDS) {
       const cfg = mk('tailwind', seed); cfg.estimator = 'oracle'; f(cfg);
       const sim = new Sim(cfg);
-      const P = ['A', 'B', 'C', 'C5', 'CL', 'C5L', 'CS', 'D', 'D2', 'E', 'Cx'];
+      const P = ['A', 'B', 'C', 'C5', 'CL', 'C5L', 'CS', 'C5S', 'D', 'D2', 'E', 'Cx'];
       const S = ['lvl', 'ban', 'man'];
       const se = {}, sb = {}, n = { lvl: 0, ban: 0, man: 0 };
       for (const p of P) { se[p] = { lvl: 0, ban: 0, man: 0 }; sb[p] = 0; }
@@ -118,7 +118,7 @@ if (mode === 'pipelines') {
         n[s]++; nn++;
         // Cx is a diagnostic only: pipeline C with the true speed rate in place of its airspeed-filter estimate
         const Vk = Math.max(6, ch.akf.x[0]);
-        const v = { A: ch.wRaw, B: ch.wDsp, C: ch.wKf, C5: ch.wKf5, CL: ch.wKfL, C5L: ch.wKf5L, CS: ch.wKfS, D: ch.wEn, D2: ch.wEnA, E: ch.wComp, Cx: ch.wKf - (Vk * ch.akf.x[1]) / 9.80665 + (Vk * vd) / 9.80665 };
+        const v = { A: ch.wRaw, B: ch.wDsp, C: ch.wKf, C5: ch.wKf5, CL: ch.wKfL, C5L: ch.wKf5L, CS: ch.wKfS, C5S: ch.wKf5S, D: ch.wEn, D2: ch.wEnA, E: ch.wComp, Cx: ch.wKf - (Vk * ch.akf.x[1]) / 9.80665 + (Vk * vd) / 9.80665 };
         for (const p of P) { const e = v[p] - w; se[p][s] += e * e; sb[p] += e; }
       }
       out.push({ cond: name, seed, n, nn, se, bias: Object.fromEntries(P.map((p) => [p, sb[p] / nn])) });
@@ -242,9 +242,11 @@ if (mode === 'pipelines') {
   save('rev2_arl', out);
 } else if (mode === 'closed') {
   cruiseOnly(false);
-  const est = arg1 || 'pf', cond = arg2 || 'tailwind';
+  const est = arg1 || 'pf', cond = arg2 || 'tailwind', only = process.argv[5] || '';
   const cfgs = [0.1, 0.2, 0.4, 0.8, 1.5].map((fc) => ({ name: `B fc=${fc}`, o: { source: 'dsp', fc } }));
   for (const [name, src] of [['C kalman', 'kf'], ['C5 drift-rate Kalman', 'kf5'], ['C+lag Kalman', 'kfl'], ['C+drift+lag Kalman', 'kf5l'], ['C scheduled Kalman', 'kfs'], ['D energy-rate Kalman', 'en'], ['D2 energy-rate Kalman + accelerometer', 'enA'], ['E complementary', 'comp']]) cfgs.push({ name, o: { source: src } });
+  if (only) cfgs.length = 0;
+  if (only) cfgs.push({ name: `only ${only}`, o: { source: only } });
   for (const c of cfgs)
     for (const seed of SEEDS) {
       const cfg = mk(cond, seed); cfg.estimator = est; Object.assign(cfg, c.o);
@@ -254,6 +256,6 @@ if (mode === 'pipelines') {
       out.push({ est, cond, name: c.name, seed, arrived: sim.done, t: sim.t, speed: (10000 - sim.guidance.dist) / sim.t, wh: m.motorWh, used: m.used,
         rejected: m.rejected + m.abandoned, ctr: m.ctrN ? m.ctrSum / m.ctrN : null, cov: m.coverN ? m.coverIn / m.coverN : null });
     }
-  save(`rev2_closed_${est}_${cond}`, out);
+  save(`rev2_closed_${est}_${cond}${only ? "_only_" + only : ""}`, out);
 } else throw new Error('unknown mode');
 console.log('done', mode, arg1, arg2, SUF, out.length);

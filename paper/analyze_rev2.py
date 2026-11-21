@@ -152,6 +152,9 @@ def closed(suf=""):
             data = load(f"rev2_closed_{est}_{cond}{suf}")
             if data is None:
                 continue
+            extra = load(f"rev2_closed_{est}_{cond}_only_kf5s{suf}")
+            if extra:
+                data = data + [dict(x, name="C5S scheduled Kalman") for x in extra]
             g = defaultdict(dict)
             for x in data:
                 g[x["name"]][x["seed"]] = x
@@ -190,6 +193,51 @@ def latency_fit(c):
     return out
 
 
+def holm(p):
+    p = np.asarray(p, float)
+    order = np.argsort(p)
+    adj = np.empty_like(p)
+    run = 0.0
+    for rank, i in enumerate(order):
+        run = max(run, (len(p) - rank) * p[i])
+        adj[i] = min(1.0, run)
+    return adj
+
+
+def closed_tests(suf=""):
+    """Paired t-tests of every configuration against the default Kalman pipeline (same seeds), Holm-adjusted within each estimator and condition."""
+    res = {}
+    for est in ("pf", "ekf"):
+        for cond in ("calm", "tailwind", "adverse"):
+            data = load(f"rev2_closed_{est}_{cond}{suf}")
+            if data is None:
+                continue
+            extra = load(f"rev2_closed_{est}_{cond}_only_kf5s{suf}")
+            if extra:
+                data = data + [dict(x, name="C5S scheduled Kalman") for x in extra]
+            g = defaultdict(dict)
+            for x in data:
+                g[x["name"]][x["seed"]] = x
+            ref = g.get("C kalman")
+            if not ref:
+                continue
+            out = {}
+            for key, field in (("speed", "speed"), ("ctr", "ctr"), ("rej", "rejected")):
+                names, ps, ds = [], [], []
+                for name, v in g.items():
+                    if name == "C kalman":
+                        continue
+                    s = [k for k in v if v[k][field] is not None and ref[k][field] is not None]
+                    a = np.array([v[k][field] for k in s]); b = np.array([ref[k][field] for k in s])
+                    t, p = stats.ttest_rel(a, b)
+                    names.append(name); ps.append(p); ds.append(float((a - b).mean()))
+                adj = holm(ps)
+                out[key] = [(n, d, float(pa)) for n, d, pa in zip(names, ds, adj) if pa < 0.05]
+                out[key + "_n"] = len(names)
+            res[f"{est}|{cond}"] = out
+    return res
+
+
 # ---------------------------------------------------------------- offline baselines (asymmetric SG, lead-compensated Butterworth)
 def baselines():
     sig = load("rev_signals")
@@ -207,6 +255,12 @@ def baselines():
         return mci(per)
 
     rows.append(("Butterworth 0.4 Hz", 0.56, score(lambda z: signal.lfilter(bB, aB, z))))
+    bb, ab = signal.bessel(2, 0.4 / (fs / 2), norm="mag")
+    rows.append(("Bessel 0.4 Hz", 0.54, score(lambda z: signal.lfilter(bb, ab, z))))
+    N = int(round(0.443 * fs / 0.4))
+    rows.append(("Moving average 0.4 Hz", (N - 1) / 2 / fs, score(lambda z: signal.lfilter(np.ones(N) / N, [1.0], z))))
+    al = 1 - np.exp(-2 * np.pi * 0.4 / fs)
+    rows.append(("One-pole 0.4 Hz", 1 / (2 * np.pi * 0.4), score(lambda z: signal.lfilter([al], [1, al - 1], z))))
     for tau_c in (0.2, 0.4, 0.56):
         def lead(z, tc=tau_c):
             y = signal.lfilter(bB, aB, z); return y + tc * fs * np.diff(y, prepend=y[0])

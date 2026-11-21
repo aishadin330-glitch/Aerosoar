@@ -81,3 +81,13 @@ uv run --with pymavlink --with scipy --with numpy python -I paper/real_data_chec
 ```
 
 The medians over the logs are written to `paper/results/real_alfa.json` (the file included here is the result used in the paper).
+
+## Re-running with the recorded sensor settings
+
+Setting `REAL=1` makes `gui/tests/paper_rev.mjs` use the sensor rates and noise measured in the ALFA flights (barometer and airspeed 10 Hz, IMU 50 Hz; noise 0.25 m, 0.20 m/s and 0.26 m/s^2) and writes files with the suffix `_real`:
+
+```bash
+cd gui
+REAL=1 node tests/paper_rev.mjs roc      # also: stress, "latency fc", "kalman on"
+cd .. && python paper/analyze_real_sim.py
+```

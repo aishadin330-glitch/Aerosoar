@@ -2,7 +2,7 @@
 // Truth is used in exactly two places: stepping the world, and scoring (metrics / oracle baseline).
 import { RNG, Ring, clamp } from './util.js';
 import { AC, Glider, Atmosphere } from './physics.js';
-import { Sensors } from './sensors.js';
+import { Sensors, RATES } from './sensors.js';
 import { VarioChain, Cusum, ThermalPF, ThermalEKF } from './estimation.js';
 import { Guidance, STATES, LIMITS } from './guidance.js';
 
@@ -245,14 +245,14 @@ export class Sim {
 
     const s = this.sensors.step(this.t, DT, g, cfg);
     const ch = this.chain;
-    ch.onImu(s.imu, DT);
+    if (s.imu) ch.onImu(s.imu, 1 / RATES.imu);
     if (s.ahrs) ch.onAhrs(s.ahrs);
     if (s.pitot) ch.onPitot(s.pitot);
     ch.nav.predict(DT);
     if (s.gnss) ch.onGnss(s.gnss, this.t);
     if (s.baro) {
       ch.onBaro(s.baro, g.motor, cfg.polarErr);
-      this.varioTick(0.05);
+      this.varioTick(1 / RATES.baro);
     }
     if (g.motor) this.m.motorWh += (AC.motorP * DT) / 3600;
   }

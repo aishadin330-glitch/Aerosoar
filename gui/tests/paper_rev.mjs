@@ -6,15 +6,22 @@
 //   signals                : pipeline-B intermediate signals for offline comparison of further filters
 import { Sim, defaultConfig, LIMITS } from '../js/sim/sim.js';
 import { Cusum } from '../js/sim/estimation.js';
+import { RATES, NOISE } from '../js/sim/sensors.js';
 import fs from 'node:fs';
 
 const mode = process.argv[2];
 const part = process.argv[3] || '';
+// REAL=1: sensor rates and noise set to the medians recorded in the ALFA flights (paper/real_data_check.py);
+// the Kalman measurement noise follows NOISE, so the filters are retuned to the recorded noise.
+const REAL = process.env.REAL === '1';
+if (REAL) { RATES.baro = 10; RATES.pitot = 10; RATES.imu = 50; NOISE.baro = 0.25; NOISE.pitot = 0.2; NOISE.accel = 0.26; }
+const SUF = REAL ? '_real' : '';
+const DTB = 1 / RATES.baro;
 const SEEDS = Array.from({ length: 30 }, (_, i) => 100 + i);
 const OUT = '../paper/results/';
 const CEIL = { ceiling: LIMITS.ceiling, reentry: LIMITS.reentry };
 const cruiseOnly = (on) => { LIMITS.ceiling = on ? 0 : CEIL.ceiling; LIMITS.reentry = on ? -1 : CEIL.reentry; };
-const save = (name, data) => fs.writeFileSync(OUT + name, JSON.stringify(data));
+const save = (name, data) => fs.writeFileSync(OUT + name.replace('.json', SUF + '.json'), JSON.stringify(data));
 
 // ------------------------------------------------------------------ detectors (same definitions as the paper)
 function threshold(level) {
@@ -57,7 +64,7 @@ function detectionFlight(seed, turb, cfgExtra = {}, only = null) {
     if (!inLift && truthIn) tLeave = sim.t;
     truthIn = inLift;
     for (const k in dets) {
-      if (!dets[k].step(sim.w, 0.05)) continue;
+      if (!dets[k].step(sim.w, DTB)) continue;
       const near = truthIn || sim.t - tLeave < 5;
       if (near && enc > 0 && !hit[k + enc]) { hit[k + enc] = true; st[k].hit++; st[k].lat.push(Math.max(0, sim.t - tEnter)); } else if (!near) st[k].fa++;
     }
@@ -108,7 +115,7 @@ if (mode === 'latency') {
           for (let i = 0; i < 300 * 100 && !sim.done; i++) {
             sim.step();
             if (sim.vt === last) continue;
-            const vd = (sim.glider.V - vPrev) / 0.05; vPrev = sim.glider.V; last = sim.vt;
+            const vd = (sim.glider.V - vPrev) / DTB; vPrev = sim.glider.V; last = sim.vt;
             if (sim.t < 10) continue;
             const k = Math.abs(vd) < 0.15 ? a.s : a.m;
             k[0] += (sim.chain.wKf - sim.air.w) ** 2; k[1]++;

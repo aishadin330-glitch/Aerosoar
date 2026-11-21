@@ -1,6 +1,6 @@
 # AeroSoar
 
-Simulation environment and experiment code for the study *Causal Signal Processing for Vertical Air Velocity Estimation and Thermal Detection in Autonomous Soaring Gliders: A Simulation Study*. The project is simulation-first: all results are obtained with assumed aircraft, atmosphere and sensor models, and no claim of flight readiness is made. No flight data are included or were used.
+Simulation environment and experiment code for the study *Causal Signal Processing for Vertical Air Velocity Estimation and Thermal Detection in Autonomous Soaring Gliders: A Simulation Study*. The project is simulation-first: all results are obtained with assumed aircraft, atmosphere and sensor models, and no claim of flight readiness is made. No flight data are included. Recorded flights of a powered fixed-wing aircraft (the public ALFA dataset, CC0) are used only to check the sensor assumptions; see below.
 
 ## Contents
 
@@ -71,3 +71,13 @@ Code is released under the MIT licence (see `LICENSE`). The bundled three.js lib
 ## Citation
 
 If you use this code, please cite the paper and the archived release (DOI to be added).
+
+## Check against recorded flights
+
+Download `dataflash.zip` from the ALFA dataset (https://kilthub.cmu.edu/articles/dataset/ALFA_A_Dataset_for_UAV_Fault_and_Anomaly_Detection/12707963, licence CC0), extract it to `data/alfa/dataflash/`, and run
+
+```bash
+uv run --with pymavlink --with scipy --with numpy python -I paper/real_data_check.py
+```
+
+The medians over the logs are written to `paper/results/real_alfa.json` (the file included here is the result used in the paper).

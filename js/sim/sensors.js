@@ -43,7 +43,7 @@ export class Sensors {
     // IMU: gravity-compensated vertical acceleration
     this.accBias += r.gauss(0.002) * Math.sqrt(dt);
     const vib = cfg.stress?.vibAmp ? cfg.stress.vibAmp * Math.sin(2 * Math.PI * (cfg.stress.vibF || 30) * t) : 0;
-    out.imu = { t, az: g.az + this.accBias + vib + r.gauss(NOISE.accel * ns) };
+    if (k % Math.round(100 / RATES.imu) === 0) out.imu = { t, az: g.az + this.accBias + vib + r.gauss(NOISE.accel * ns) };
 
     if (k % 2 === 0) {
       out.ahrs = { t, phi: g.phi + r.gauss(NOISE.phi * ns), chi: g.chi + r.gauss(NOISE.chi * ns) };
@@ -53,11 +53,11 @@ export class Sensors {
     const scale = 1.01 + (cfg.faults.pitot ? 0.07 : 0);
     if (this.pitotLag === null) this.pitotLag = g.V * scale;
     this.pitotLag += ((g.V * scale - this.pitotLag) * dt) / (cfg.pitotTau ?? 0.12);
-    if (k % 4 === 0) out.pitot = { t, V: this.pitotLag + r.gauss(NOISE.pitot * ns) };
+    if (k % Math.round(100 / RATES.pitot) === 0) out.pitot = { t, V: this.pitotLag + r.gauss(NOISE.pitot * ns) };
 
     // barometer: slow random-walk bias, optional steady pressure drift
     this.baroBias += r.gauss(0.02) * Math.sqrt(dt) + (cfg.faults.baro ? 0.08 * dt : 0);
-    if (k % 5 === 0) {
+    if (k % Math.round(100 / RATES.baro) === 0) {
       let nb = r.gauss(NOISE.baro * ns);
       if (cfg.stress?.tauBaro > 0) {
         const a = Math.exp(-0.05 / cfg.stress.tauBaro);

@@ -78,7 +78,7 @@ export class VerticalKF extends KF {
     this.x.set([h0, 0, 0, 0]);
     this.setDiag([9, 4, 0.02, 4]);
   }
-  predict(az, dt, extraVar = 0) {
+  predict(az, dt, extraVar = 0, extraBias = 0) {
     const x = this.x;
     const a = az - x[2];
     x[0] += x[1] * dt + 0.5 * a * dt * dt;
@@ -90,7 +90,7 @@ export class VerticalKF extends KF {
     Q[0] = h2 * h2 * sa2;
     Q[1] = Q[4] = h2 * dt * sa2;
     Q[5] = dt * dt * sa2;
-    Q[10] = 0.003 * 0.003 * dt;
+    Q[10] = (0.003 * 0.003 + extraBias) * dt;
     Q[15] = this.qb * this.qb * dt;
     this.propagate(F, Q);
   }
@@ -123,7 +123,7 @@ export class VerticalKF5 extends KF {
     this.x.set([h0, 0, 0, 0, 0]);
     this.setDiag([9, 4, 0.02, 4, 0.01]);
   }
-  predict(az, dt, extraVar = 0) {
+  predict(az, dt, extraVar = 0, extraBias = 0) {
     const x = this.x;
     const a = az - x[2];
     x[0] += x[1] * dt + 0.5 * a * dt * dt;
@@ -138,7 +138,7 @@ export class VerticalKF5 extends KF {
     Q[0] = h2 * h2 * sa2;
     Q[1] = Q[5] = h2 * dt * sa2;
     Q[6] = dt * dt * sa2;
-    Q[12] = 0.003 * 0.003 * dt;
+    Q[12] = (0.003 * 0.003 + extraBias) * dt;
     Q[18] = this.qb * this.qb * dt;
     Q[24] = this.qr * this.qr * dt;
     this.propagate(F, Q);
@@ -164,7 +164,7 @@ export class EnergyKF extends KF {
     this.reset(0);
   }
   reset(e0) {
-    this.qe = this.qe ?? 0.6;
+    this.qe = this.qe ?? 0.2;
     this.x.set([e0, 0]);
     this.setDiag([9, 1]);
   }
@@ -233,8 +233,12 @@ export class VarioChain {
     this.vkf.qb = o.qb ?? 0.05;
     this.vkf5.qb = o.qb ?? 0.05;
     this.vkf5.qr = o.qr ?? 0.003;
-    this.enkf.qe = o.qe ?? 0.6;
-    this.tiltQ = o.tiltQ === true;
+    this.enkf.qe = o.qe ?? 0.2;
+    this.tiltQ = o.tiltQ ?? false; // false | true (white allowance) | 'bias' (allowance on the accelerometer-bias state)
+    this.fcc = o.fcc ?? 0.18; // crossover of the complementary pipeline
+    this.sA0 = o.sA0 ?? 0.06; // scheduled blend: speed-rate thresholds [m/s^2] and release time [s]
+    this.sA1 = o.sA1 ?? 0.3;
+    this.sHold = o.sHold ?? 0.5;
     this.akf.qj = o.qj ?? 0.25;
     this.useGnssAlt = o.gnss !== false;
     this.nav.compensate = o.comp !== false;
@@ -253,6 +257,9 @@ export class VarioChain {
     this.lp = makeFilter(type, fc, RATES.baro);
     this.lp2 = makeFilter(type, fc, RATES.baro); // ablation channel without total-energy compensation
     this.lp3 = makeFilter(type, fc, RATES.baro); // speed-term channel of the complementary pipeline
+    this.lp4 = makeFilter(type, fc, RATES.baro); // lag matching of the Kalman climb rate (C+lag)
+    this.lp5 = makeFilter(type, fc, RATES.baro); // lag matching of the drift-rate Kalman climb rate
+    this.lp6 = makeFilter(type, fc, RATES.baro); // lag matching of the complementary climb rate
     this.delay = this.lp.delay;
   }
   reset(g) {
@@ -262,7 +269,8 @@ export class VarioChain {
     this.vc = 0;
     this.axLp = 0;
     this.vtPrev = null;
-    this.wEn = this.wEnA = this.wComp = this.wKf5 = 0;
+    this.wEn = this.wEnA = this.wComp = this.wKf5 = this.wKfL = this.wKf5L = this.wKfS = 0;
+    this.sch = 0;
     this.akf.reset(g.V);
     this.nav.reset(g.x, g.y, g.chi);
     this.setFilter(this.filterType, this.fc);
@@ -275,8 +283,10 @@ export class VarioChain {
   }
   onImu(m, dt) {
     const ex = this.tiltQ ? (G * Math.tan(this.nav.phi) * 0.0175) ** 2 : 0; // attitude-error allowance in turns (1 deg)
-    this.vkf.predict(m.az, dt, ex);
-    this.vkf5.predict(m.az, dt, ex);
+    const white = this.tiltQ === 'bias' ? 0 : ex;
+    const bias = this.tiltQ === 'bias' ? ex * (2 / 20) : 0; // Gauss-Markov error, 20 s: process-noise density 2 sigma^2 / tau
+    this.vkf.predict(m.az, dt, white, bias);
+    this.vkf5.predict(m.az, dt, white, bias);
     this.vc += m.az * dt; // complementary climb rate: integrate the acceleration, the barometer corrects it in onBaro
     if (m.ax !== undefined) this.axLp += (1 - Math.exp(-dt / 0.8)) * (m.ax - this.axLp);
   }
@@ -329,6 +339,13 @@ export class VarioChain {
 
     // C5 — as C, with a barometer drift-rate state
     this.wKf5 = this.vkf5.vz + (V * a) / G + dragSink(V, phi) * k - thrust;
+    // lag-matched variants: climb rate and speed-rate term then see the same smoothing delay
+    this.wKfL = this.lp4.step(this.vkf.vz) + (V * a) / G + dragSink(V, phi) * k - thrust;
+    this.wKf5L = this.lp5.step(this.vkf5.vz) + (V * a) / G + dragSink(V, phi) * k - thrust;
+    // scheduled blend: unmatched (low-lag) Kalman output in steady flight, lag-matched output while the speed is changing
+    const tgt = clamp((Math.abs(a) - this.sA0) / (this.sA1 - this.sA0), 0, 1);
+    this.sch = Math.max(tgt, this.sch * Math.exp(-dt / this.sHold));
+    this.wKfS = this.wKf + this.sch * (this.wKfL - this.wKf);
 
     // D — energy-rate Kalman filter on E = h + V^2/2g; the polar supplies the drag term
     const Vs = Math.max(6, this.Vlp);
@@ -339,11 +356,11 @@ export class VarioChain {
     this.wEnA = this.enkf.x[1] - (Vs * this.axLp) / G;
 
     // E — complementary climb-rate filter (acceleration + differenced barometer) plus the low-passed total-energy term
-    this.vc += (1 - Math.exp(-2 * Math.PI * this.fc * dt)) * (hd - this.vc);
+    this.vc += (1 - Math.exp(-2 * Math.PI * this.fcc * dt)) * (hd - this.vc);
     const vTerm = (Vs * Vs) / (2 * G);
     const dV = this.vtPrev === null ? 0 : (vTerm - this.vtPrev) / dt;
     this.vtPrev = vTerm;
-    this.wComp = this.vc + this.lp3.step(dV) + dragSink(Vs, phi) * k - thrust;
+    this.wComp = this.lp6.step(this.vc) + this.lp3.step(dV) + dragSink(Vs, phi) * k - thrust;
   }
 }
 

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AeroSoar — Atmospheric State Estimation Simulator</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div id="app">
+
+  <!-- configuration -->
+  <aside id="rail">
+    <div class="brand"><b>AeroSoar</b><span>Atmospheric State Estimation Simulator</span></div>
+
+    <div class="transport">
+      <button id="run" class="go" title="Start or pause the simulation (Space)">Start</button>
+      <button id="reset" class="ghost" title="Reset the simulation (R)">Reset</button>
+    </div>
+    <div class="seg" id="speed" role="group" aria-label="Simulation rate">
+      <button data-v="1">1×</button><button data-v="4" class="on">4×</button><button data-v="8">8×</button><button data-v="16">16×</button>
+    </div>
+
+    <section>
+      <h3>Conditions</h3>
+      <div class="seg" id="scenarios" role="group" aria-label="Atmospheric conditions"></div>
+      <p class="note" id="scnNote"></p>
+    </section>
+
+    <section>
+      <h3>Thermal estimator</h3>
+      <div class="grid2" id="estimator" role="group" aria-label="Thermal estimator">
+        <button data-v="pf" class="on" title="400 particles; multi-hypothesis posterior over thermal parameters">Particle filter</button>
+        <button data-v="ekf" title="Single Gaussian posterior; classical recursive baseline">Extended Kalman</button>
+        <button data-v="ml" id="est-ml" disabled title="Trained neural network; loading">Neural network</button>
+        <button data-v="reactive" title="No thermal model; bank angle adjusted from the lift gradient">Variometer rule</button>
+        <button data-v="oracle" title="Uses simulator ground truth; upper bound only, not deployable">Oracle</button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Sensors</h3>
+      <label class="sl"><span>Measurement noise scale</span><output id="o-noise"></output><input type="range" id="s-noise" min="0.25" max="4" step="0.25"></label>
+      <div class="chips" id="faults">
+        <button data-f="baro" title="Constant pressure drift of +0.08 m/s on barometric altitude">Barometer drift</button>
+        <button data-f="gnss" title="Intermittent GNSS outages of 6–12 s duration">GNSS outage</button>
+        <button data-f="pitot" title="Airspeed scale error of +7 %">Pitot error</button>
+      </div>
+    </section>
+
+    <label class="tog"><input type="checkbox" id="truth" checked><span>Display ground truth</span></label>
+  </aside>
+
+  <!-- three-dimensional flight view -->
+  <main id="stage">
+    <canvas id="view"></canvas>
+    <div id="labels"></div>
+
+    <div id="tape">
+      <div><i>Time</i><b id="t-time">00:00</b></div>
+      <div><i>Altitude</i><b id="t-alt">300</b><u>m</u></div>
+      <div><i>Vertical speed</i><b id="t-climb">+0.0</b><u>m/s</u></div>
+      <div><i>Distance remaining</i><b id="t-dist">10.0</b><u>km</u></div>
+      <div class="badge" id="b-alert" hidden></div>
+    </div>
+
+    <button class="ghost tool" id="mlToggle" title="Show or hide the machine-learning pipeline window">ML pipeline</button>
+    <div class="seg mini" id="camera" role="group" aria-label="Camera view">
+      <button data-v="chase" class="on">Chase</button><button data-v="route">Route</button>
+    </div>
+
+    <div id="fsm">
+      <ol id="fsmStates"></ol>
+      <p id="fsmReason"></p>
+    </div>
+    <section id="ml" hidden aria-label="Machine-learning pipeline">
+      <header id="mlHead"><h4>Machine-learning pipeline</h4><span class="pill live" id="ml-name">–</span><button class="x" id="mlClose" aria-label="Close">×</button></header>
+      <ol class="flow" id="mlFlow">
+        <li><b>Sensors</b><span>IMU, baro, pitot, GNSS</span></li>
+        <li><b>Features</b><span>Kalman and DSP, 2 Hz</span></li>
+        <li><b>Window</b><span>32 steps × 9 channels</span></li>
+        <li id="ml-box"><b>Network</b><span id="ml-box-s">–</span></li>
+        <li><b>Estimate</b><span>Existence, centre, strength, spread</span></li>
+      </ol>
+      <h5>Network input (last 16 s, normalised)</h5>
+      <canvas id="ml-in"></canvas>
+      <h5>Network output</h5>
+      <table class="est">
+        <thead><tr><th></th><th>Network (±2σ)</th><th class="tcol">Truth</th></tr></thead>
+        <tbody>
+          <tr><td>Thermal probability</td><td id="ml-p">–</td><td class="tcol" id="ml-pt">–</td></tr>
+          <tr><td>Peak updraft</td><td id="ml-w">–</td><td class="tcol" id="ml-wt">–</td></tr>
+          <tr><td>Spread σ</td><td id="ml-s">–</td><td class="tcol" id="ml-st">–</td></tr>
+          <tr><td>Centre error</td><td id="ml-e">–</td><td class="tcol">–</td></tr>
+        </tbody>
+      </table>
+      <h5>Centre error over time <span class="lg"><i class="a"></i>Network <i class="b"></i>Selected estimator</span></h5>
+      <canvas id="ml-err"></canvas>
+      <h5>Model selection (held-out flights)</h5>
+      <table class="sel" id="ml-sel"></table>
+      <p class="foot" id="ml-foot"></p>
+    </section>
+  </main>
+
+  <!-- time series and flight profile -->
+  <section id="dock">
+    <div class="card chart">
+      <header>
+        <h4>Vertical air velocity</h4>
+        <div class="legend">
+          <span class="k truth">Truth</span>
+          <span class="k dsp">DSP filter <b id="r-dsp">–</b></span>
+          <span class="k kf">Kalman filter <b id="r-kf">–</b></span>
+          <span class="unit" title="Root-mean-square error relative to ground truth over a 30 s window">RMSE, m/s</span>
+        </div>
+      </header>
+      <canvas id="c-strip"></canvas>
+    </div>
+    <div class="card chart">
+      <header>
+        <h4>Flight profile</h4>
+        <div class="legend"><span class="k path">Flown</span><span class="k glide">Final-glide path</span><span class="k therm">Thermal</span></div>
+      </header>
+      <canvas id="c-profile"></canvas>
+    </div>
+  </section>
+
+  <!-- estimates and mission results -->
+  <aside id="side">
+    <div class="card">
+      <header><h4>Thermal estimate</h4><span class="pill" id="e-status">No active track</span></header>
+      <table class="est">
+        <thead><tr><th></th><th>Estimate (±2σ)</th><th class="tcol">Truth</th></tr></thead>
+        <tbody>
+          <tr><td>Peak updraft</td><td id="e-w">–</td><td class="tcol" id="e-wt">–</td></tr>
+          <tr><td>Spread σ</td><td id="e-s">–</td><td class="tcol" id="e-st">–</td></tr>
+          <tr><td>Centre error</td><td id="e-p">–</td><td class="tcol" id="e-pt">–</td></tr>
+        </tbody>
+      </table>
+      <div class="cover" title="Fraction of time the true centre lies within the estimated 95 % confidence region; the marker indicates the nominal 95 % level"><span>95 % region coverage</span><div class="bar"><i id="e-cov"></i><u></u></div><b id="e-covn">–</b></div>
+    </div>
+
+    <div class="card score">
+      <header><h4>Mission</h4></header>
+      <dl>
+        <div><dt>Mean task speed</dt><dd id="m-speed">–</dd></div>
+        <div><dt>Altitude gained in thermals</dt><dd id="m-gain">0 m</dd></div>
+        <div><dt>Thermals used / rejected</dt><dd id="m-used">0 / 0</dd></div>
+        <div><dt>Motor energy consumed</dt><dd id="m-wh">0.0 Wh</dd></div>
+      </dl>
+    </div>
+  </aside>
+</div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

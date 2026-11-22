@@ -22,7 +22,7 @@ def write(name, body):
 
 
 LAB = {"A": "A~Unfiltered", "B": "B~Butterworth", "C": "C~Kalman", "CL": "CL~Kalman, lag-matched", "C5S": "CS~Kalman, scheduled",
-       "D": "D~Energy-rate Kalman", "D2": "D2~Energy-rate Kalman + acc.", "E": "E~Complementary", "Cx": "Cx~Kalman, true speed rate"}
+       "D": "D~Energy-rate Kalman", "D2": "D2~Energy-rate Kalman + acc.", "E": "E~Complementary", "CI": "CI~Kalman, IMU-aided speed rate", "Cx": "Cx~Kalman, true speed rate"}
 
 # ---------------------------------------------------------------- offline filter baselines
 rows = A.baselines()
@@ -44,7 +44,7 @@ write("baselines", body)
 
 # ---------------------------------------------------------------- pipelines, three sensor settings
 res = {s: A.pipelines(s) for s in ("", "_real", "_trace")}
-order = ["A", "B", "C", "CL", "C5S", "D", "D2", "E", "Cx"]
+order = ["A", "B", "C", "CL", "C5S", "CI", "D", "D2", "E", "Cx"]
 body = "\\begin{tabular}{@{}lcccccc@{}}\n\\toprule\n & \\multicolumn{2}{c}{Nominal sensor model} & \\multicolumn{2}{c}{Recorded rates, noise level} & \\multicolumn{2}{c}{Recorded noise replayed} \\\\\n"
 body += "Pipeline & steady & speed change & steady & speed change & steady & speed change \\\\\n\\midrule\n"
 for p in order:
@@ -63,7 +63,7 @@ write("pipelines", body)
 conds = [("drift", "Barometer drift ramp"), ("pitot", "Pitot scale error 7\\%"), ("gnss", "GNSS outages"), ("polarM", "Drag polar $-20\\%$"), ("polarP", "Drag polar $+20\\%$"),
          ("tilt1", "Attitude error $1^\\circ$"), ("tilt1B", "Attitude error $1^\\circ$, allowance"), ("aoa05", "Accelerometer alignment $0.5^\\circ$"), ("aoa1", "Accelerometer alignment $1^\\circ$"),
          ("noise2", "Sensor noise $\\times2$"), ("noise3", "Sensor noise $\\times3$")]
-cols = ["B", "C", "C5S", "D", "D2"]
+cols = ["B", "C", "C5S", "CI", "D", "D2"]
 nom = res[""]["nominal"]
 body = "\\begin{tabular}{@{}l" + "c" * len(cols) + "@{}}\n\\toprule\nCondition & " + " & ".join(LAB[c].split("~")[0] for c in cols) + " \\\\\n\\midrule\n"
 body += "Nominal & " + " & ".join(f"{nom[c]['steady'][0]:.3f} ({nom[c]['bias'][0]:+.2f})" for c in cols) + " \\\\\n"
@@ -136,7 +136,7 @@ write("arl", body)
 # ---------------------------------------------------------------- closed loop: centre error per estimator and condition
 cl = A.closed("")
 names = [("B fc=0.4", "B~Butterworth, 0.4~Hz"), ("B fc=1.5", "B~Butterworth, 1.5~Hz"), ("C kalman", "C~Kalman"), ("C+lag Kalman", "CL~Kalman, lag-matched"),
-         ("C5S scheduled Kalman", "CS~Kalman, scheduled"), ("D energy-rate Kalman", "D~Energy-rate Kalman"),
+         ("C5S scheduled Kalman", "CS~Kalman, scheduled"), ("CI IMU-aided speed-rate Kalman", "CI~Kalman, IMU-aided speed rate"), ("D energy-rate Kalman", "D~Energy-rate Kalman"),
          ("D2 energy-rate Kalman + accelerometer", "D2~Energy-rate Kalman + acc."), ("E complementary", "E~Complementary")]
 keys = [f"{e}|{c}" for e in ("pf", "ekf") for c in ("calm", "tailwind", "adverse")]
 body = "\\begin{tabular}{@{}l" + "c" * 6 + "@{}}\n\\toprule\n & \\multicolumn{3}{c}{Particle filter} & \\multicolumn{3}{c}{Extended Kalman filter} \\\\\nPipeline & calm & tailwind & adverse & calm & tailwind & adverse \\\\\n\\midrule\n"

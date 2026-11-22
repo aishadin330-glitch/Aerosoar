@@ -13,7 +13,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 G = 9.80665
 FS = 10.0
 segs = json.load(open(ROOT / "data/alfa/streams/segments.json"))
-rep = json.load(open(ROOT / "data/alfa/streams/replay_out.json"))
+import os
+rep = json.load(open(ROOT / "data/alfa/streams" / os.environ.get("OUT", "replay_out.json")))
 b_lp, a_lp = signal.butter(2, 0.5 / (FS / 2))
 zp = lambda x: signal.filtfilt(b_lp, a_lp, x)
 tq = lambda n: stats.t.ppf(0.975, n - 1)
@@ -39,7 +40,7 @@ for s, r in zip(segs, rep):
 sign = float(np.median(signs)); lag = int(np.median(lags))
 print("GNSS vz sign", sign, "lag samples", lag, "(positive = GNSS later)")
 
-pipes = {"B": ("B", "sB"), "C": ("C", "sC"), "CL": ("CL", "sC"), "CS": ("CS", "sC"), "D": ("D", "sB"), "E": ("E", "sB")}
+pipes = {"B": ("B", "sB"), "C": ("C", "sC"), "CL": ("CL", "sC"), "CS": ("CS", "sC"), "CI": ("CI", "sI"), "D": ("D", "sB"), "E": ("E", "sB")}
 res = {p: {"steady": [], "man": []} for p in pipes}
 diff = {"C-CL": {"steady": [], "man": []}, "C-CS": {"steady": [], "man": []}, "B-CL": {"steady": [], "man": []}}
 pool = {p: {"steady": [0, 0], "man": [0, 0]} for p in pipes}

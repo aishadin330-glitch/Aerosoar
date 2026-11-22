@@ -71,6 +71,7 @@ export class Sim {
     this.atm = new Atmosphere(new RNG(cfg.seed * 104729 + 1));
     this.atm.sinkRing = sc.sinkRing;
     this.atm.turb = sc.turb;
+    if (cfg.hGust) this.atm.hGust = cfg.hGust;
     this.atm.setWind(sc.wind, sc.from);
     if (sc.thermals) for (const t of sc.thermals) this.atm.addThermal(t);
     else layThermals(this.atm, this.atm.rng, sc);
@@ -266,9 +267,9 @@ export class Sim {
     const atm = this.atm;
     this.vt++;
 
-    const SRC = { dsp: ch.wDsp, kf: ch.wKf, kf5: ch.wKf5, kfl: ch.wKfL, kf5l: ch.wKf5L, kfs: ch.wKfS, kf5s: ch.wKf5S, en: ch.wEn, enA: ch.wEnA, comp: ch.wComp };
+    const SRC = { dsp: ch.wDsp, kf: ch.wKf, kf5: ch.wKf5, kfl: ch.wKfL, kf5l: ch.wKf5L, kfs: ch.wKfS, kf5s: ch.wKf5S, ki: ch.wKfI, en: ch.wEn, enA: ch.wEnA, comp: ch.wComp };
     this.w = SRC[cfg.source] ?? ch.wKf;
-    this.sig = cfg.source === undefined || ['kf', 'kf5', 'kfl', 'kf5l', 'kfs', 'kf5s'].includes(cfg.source) ? ch.sigKf : 0.45;
+    this.sig = cfg.source === undefined || ['kf', 'kf5', 'kfl', 'kf5l', 'kfs', 'kf5s', 'ki'].includes(cfg.source) ? ch.sigKf : 0.45;
     this.wDot += (((this.w - this.wPrev) / dt - this.wDot) * dt) / 1.5;
     this.wPrev = this.w;
 

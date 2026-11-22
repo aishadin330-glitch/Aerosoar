@@ -32,17 +32,17 @@ for (const s of segs) {
   off = n ? off / n : 0;
   const chain = new VarioChain();
   chain.reset({ h: s.baro.alt[0], V: s.arsp.v[0], x: 0, y: 0, chi: 0 });
-  chain.configure({});
+  chain.configure({ tf: Number(process.env.TF || 0.2), sa: Number(process.env.SA || 0.15), qbS: Number(process.env.QBS || 0.05) });
   let roll = 0, pitch = 0;
-  const rec = { name: s.name, t: [], A: [], B: [], C: [], C5: [], CL: [], C5L: [], CS: [], D: [], E: [], D2: [], sB: [], sC: [], phi: [] };
+  const rec = { name: s.name, t: [], A: [], B: [], C: [], C5: [], CL: [], C5L: [], CS: [], CI: [], D: [], E: [], D2: [], sB: [], sC: [], sI: [], phi: [] };
   for (const [t, key, i] of ev) {
     if (key === 'att') {
       roll = s.att.roll[i] * D2R; pitch = s.att.pitch[i] * D2R;
-      chain.onAhrs({ phi: roll, chi: s.att.yaw[i] * D2R });
+      chain.onAhrs({ phi: roll, chi: s.att.yaw[i] * D2R, theta: pitch });
     } else if (key === 'imu') {
       const fx = s.imu.ax[i], fy = s.imu.ay[i], fz = s.imu.az[i];
       const fD = -Math.sin(pitch) * fx + Math.sin(roll) * Math.cos(pitch) * fy + Math.cos(roll) * Math.cos(pitch) * fz; // specific force, down component
-      chain.onImu({ az: -(fD + G), ax: fx }, 1 / RATES.imu);
+      chain.onImu({ az: -(fD + G), ax: fx, fxb: fx, fzb: fz }, 1 / RATES.imu);
     } else if (key === 'arsp') chain.onPitot({ V: s.arsp.v[i] });
     else if (key === 'gps') {
       if (s.gps.status[i] >= 3) chain.onGnss({ h: s.gps.alt[i] - off, x: 0, y: 0, vx: 0, vy: 0, tAcq: t }, t);
@@ -53,11 +53,11 @@ for (const s of segs) {
       rec.t.push(+t.toFixed(3));
       const r = (x) => +x.toFixed(4);
       rec.A.push(r(chain.wRaw)); rec.B.push(r(chain.wDsp)); rec.C.push(r(chain.wKf)); rec.C5.push(r(chain.wKf5)); rec.CL.push(r(chain.wKfL)); rec.C5L.push(r(chain.wKf5L));
-      rec.CS.push(r(chain.wKf5S)); rec.D.push(r(chain.wEn)); rec.E.push(r(chain.wComp)); rec.D2.push(r(chain.wEnA));
-      rec.sB.push(r(dragSink(Math.max(6, chain.Vlp), phi))); rec.sC.push(r(dragSink(Math.max(6, chain.akf.x[0]), phi))); rec.phi.push(r(phi));
+      rec.CS.push(r(chain.wKf5S)); rec.CI.push(r(chain.wKfI)); rec.D.push(r(chain.wEn)); rec.E.push(r(chain.wComp)); rec.D2.push(r(chain.wEnA));
+      rec.sB.push(r(dragSink(Math.max(6, chain.Vlp), phi))); rec.sC.push(r(dragSink(Math.max(6, chain.akf.x[0]), phi))); rec.sI.push(r(dragSink(Math.max(6, chain.skf.x[0]), phi))); rec.phi.push(r(phi));
     }
   }
   out.push(rec);
 }
-fs.writeFileSync('../data/alfa/streams/replay_out.json', JSON.stringify(out));
+fs.writeFileSync('../data/alfa/streams/' + (process.env.OUT || 'replay_out.json'), JSON.stringify(out));
 console.log('replayed', out.length, 'segments,', out.reduce((a, r) => a + r.t.length, 0), 'baro samples');

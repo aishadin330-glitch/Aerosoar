@@ -30,6 +30,8 @@ const cruiseOnly = (on) => { LIMITS.ceiling = on ? 0 : CEIL.ceiling; LIMITS.reen
 const save = (name, data) => fs.writeFileSync(OUT + name + SUF + '.json', JSON.stringify(data));
 const mk = (cond, seed) => { const cfg = defaultConfig(cond); cfg.seed = seed; if (TR) cfg.traces = TR; return cfg; };
 const out = [];
+// GNSS-aided speed-rate filter settings (jerk density and GNSS-airspeed noise); overridden through the environment while tuning
+const GSK = { gnssSpeed: true, qj: +(process.env.GS_QJ || 0.25), rg: Number(process.env.GS_RG || 0.15) ** 2 };
 
 // ------------------------------------------------------------------ detectors
 function threshold(level) {
@@ -114,6 +116,11 @@ if (mode === 'pipelines') {
     tilt1: (c) => { c.stress = { tilt: 1 }; },
     tilt1Q: (c) => { c.stress = { tilt: 1 }; c.tune = { kf: { tiltQ: true } }; },
     tilt1B: (c) => { c.stress = { tilt: 1 }; c.tune = { kf: { tiltQ: 'bias' } }; },
+    gs: (c) => { c.tune = { kf: GSK }; },
+    gsH05: (c) => { c.tune = { kf: GSK }; c.hGust = { sigma: 0.5 }; },
+    gsH1: (c) => { c.tune = { kf: GSK }; c.hGust = { sigma: 1 }; },
+    H05: (c) => { c.hGust = { sigma: 0.5 }; },
+    H1: (c) => { c.hGust = { sigma: 1 }; },
     aoa05: (c) => { c.stress = { aoa: 0.5 }; },
     aoa1: (c) => { c.stress = { aoa: 1 }; },
     gnss: (c) => { c.faults.gnss = true; },
@@ -125,7 +132,7 @@ if (mode === 'pipelines') {
     for (const seed of SEEDS) {
       const cfg = mk('tailwind', seed); cfg.estimator = 'oracle'; f(cfg);
       const sim = new Sim(cfg);
-      const P = ['A', 'B', 'C', 'C5', 'CL', 'C5L', 'CS', 'C5S', 'D', 'D2', 'E', 'Cx'];
+      const P = ['A', 'B', 'C', 'C5', 'CL', 'C5L', 'CS', 'C5S', 'CI', 'D', 'D2', 'E', 'Cx'];
       const S = ['lvl', 'ban', 'man'];
       const se = {}, sb = {}, n = { lvl: 0, ban: 0, man: 0 };
       for (const p of P) { se[p] = { lvl: 0, ban: 0, man: 0 }; sb[p] = 0; }
@@ -141,7 +148,7 @@ if (mode === 'pipelines') {
         n[s]++; nn++;
         // Cx is a diagnostic only: pipeline C with the true speed rate in place of its airspeed-filter estimate
         const Vk = Math.max(6, ch.akf.x[0]);
-        const v = { A: ch.wRaw, B: ch.wDsp, C: ch.wKf, C5: ch.wKf5, CL: ch.wKfL, C5L: ch.wKf5L, CS: ch.wKfS, C5S: ch.wKf5S, D: ch.wEn, D2: ch.wEnA, E: ch.wComp, Cx: ch.wKf - (Vk * ch.akf.x[1]) / 9.80665 + (Vk * vd) / 9.80665 };
+        const v = { A: ch.wRaw, B: ch.wDsp, C: ch.wKf, C5: ch.wKf5, CL: ch.wKfL, C5L: ch.wKf5L, CS: ch.wKfS, C5S: ch.wKf5S, CI: ch.wKfI, D: ch.wEn, D2: ch.wEnA, E: ch.wComp, Cx: ch.wKf - (Vk * ch.akf.x[1]) / 9.80665 + (Vk * vd) / 9.80665 };
         for (const p of P) { const e = v[p] - w; se[p][s] += e * e; sb[p] += e; }
       }
       out.push({ cond: name, seed, n, nn, se, bias: Object.fromEntries(P.map((p) => [p, sb[p] / nn])) });
@@ -194,6 +201,53 @@ if (mode === 'pipelines') {
       out.push({ ...kf, seed, a });
     }
   save('rev2_tuneS', out);
+} else if (mode === 'tuneG') {
+  // tuning of the GNSS-aided speed-rate filter on separate seeds (500-529), without and with horizontal gusts
+  cruiseOnly(false);
+  for (const hg of [0, 0.5])
+    for (const qj of [0.25, 0.5, 1, 2])
+      for (const rg of [0.1, 0.15, 0.25])
+        for (let seed = 500; seed < 530; seed++) {
+          const cfg = mk('tailwind', seed); cfg.estimator = 'oracle'; cfg.tune = { kf: { gnssSpeed: true, qj, rg: rg * rg } };
+          if (hg) cfg.hGust = { sigma: hg };
+          const sim = new Sim(cfg);
+          let last = 0, vPrev = sim.glider.V;
+          const a = { C: [0, 0, 0, 0], CL: [0, 0, 0, 0], CS: [0, 0, 0, 0] };
+          for (let i = 0; i < 300 * 100 && !sim.done; i++) {
+            sim.step();
+            if (sim.vt === last) continue;
+            last = sim.vt;
+            const vd = (sim.glider.V - vPrev) / DTB; vPrev = sim.glider.V;
+            if (sim.t < 15) continue;
+            const ch = sim.chain, w = sim.air.w, man = Math.abs(vd) >= 0.15 ? 2 : 0;
+            for (const [p, v] of [['C', ch.wKf], ['CL', ch.wKfL], ['CS', ch.wKf5S]]) { a[p][man] += (v - w) ** 2; a[p][man + 1]++; }
+          }
+          out.push({ hg, qj, rg, seed, a });
+        }
+  save('rev2_tuneG', out);
+} else if (mode === 'tuneI') {
+  // tuning of the IMU-aided speed-rate filter on separate seeds (500-529): acceleration noise, bias density, output smoothing
+  cruiseOnly(false);
+  for (const tf of [0.1, 0.2, 0.4])
+    for (const sa of [0.1, 0.15, 0.3])
+      for (const qbS of [0.02, 0.05, 0.1])
+        for (let seed = 500; seed < 530; seed++) {
+          const cfg = mk('tailwind', seed); cfg.estimator = 'oracle'; cfg.tune = { kf: { tf, sa, qbS } };
+          const sim = new Sim(cfg);
+          let last = 0, vPrev = sim.glider.V;
+          const a = [0, 0, 0, 0];
+          for (let i = 0; i < 300 * 100 && !sim.done; i++) {
+            sim.step();
+            if (sim.vt === last) continue;
+            last = sim.vt;
+            const vd = (sim.glider.V - vPrev) / DTB; vPrev = sim.glider.V;
+            if (sim.t < 15) continue;
+            const man = Math.abs(vd) >= 0.15 ? 2 : 0;
+            a[man] += (sim.chain.wKfI - sim.air.w) ** 2; a[man + 1]++;
+          }
+          out.push({ tf, sa, qbS, seed, a });
+        }
+  save('rev2_tuneI', out);
 } else if (mode === 'detect') {
   cruiseOnly(true);
   const src = arg1 || 'kf', dbl = +(arg2 || 0);

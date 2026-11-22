@@ -161,6 +161,9 @@ def closed(suf=""):
             extra = load(f"rev2_closed_{est}_{cond}_only_kf5s{suf}")
             if extra:
                 data = data + [dict(x, name="C5S scheduled Kalman") for x in extra]
+            extra = load(f"rev2_closed_{est}_{cond}_only_ki{suf}")
+            if extra:
+                data = data + [dict(x, name="CI IMU-aided speed-rate Kalman") for x in extra]
             lagd = load(f"rev2_lag_{est}_{cond}{suf}")
             if lagd:
                 data = data + lagd
@@ -224,6 +227,9 @@ def closed_tests(suf=""):
             extra = load(f"rev2_closed_{est}_{cond}_only_kf5s{suf}")
             if extra:
                 data = data + [dict(x, name="C5S scheduled Kalman") for x in extra]
+            extra = load(f"rev2_closed_{est}_{cond}_only_ki{suf}")
+            if extra:
+                data = data + [dict(x, name="CI IMU-aided speed-rate Kalman") for x in extra]
             g = defaultdict(dict)
             for x in data:
                 g[x["name"]][x["seed"]] = x

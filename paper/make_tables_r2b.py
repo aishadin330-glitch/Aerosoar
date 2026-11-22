@@ -27,7 +27,7 @@ body += "\\bottomrule\n\\end{tabular}\n"
 # replay of recorded flights against the GNSS-based reference
 rr = json.load(open(ROOT / "results" / "real_replay_summary.json"))
 body = "\\begin{tabular}{@{}lcc@{}}\n\\toprule\nPipeline & quiet & active \\\\\n\\midrule\n"
-for p, lab in (("B", "B~Butterworth"), ("C", "C~Kalman"), ("CL", "CL~Kalman, lag-matched"), ("CS", "CS~Kalman, scheduled"), ("D", "D~Energy-rate Kalman"), ("E", "E~Complementary")):
+for p, lab in (("B", "B~Butterworth"), ("C", "C~Kalman"), ("CL", "CL~Kalman, lag-matched"), ("CS", "CS~Kalman, scheduled"), ("CI", "CI~Kalman, IMU-aided speed rate"), ("D", "D~Energy-rate Kalman"), ("E", "E~Complementary")):
     v = rr["pipes"][p]
     body += f"{lab} & {pm(v['steady']['per_segment'], 2)} & {pm(v['man']['per_segment'], 2)} \\\\\n"
 body += "\\bottomrule\n\\end{tabular}\n"

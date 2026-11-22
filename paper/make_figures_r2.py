@@ -54,7 +54,7 @@ save(fig, "roc2")
 
 # ------------------------------------------------------------------ pipelines: steady against speed-change error
 STY = {"B": ("B  Butterworth", "#D55E00", "o"), "C": ("C  Kalman", "#0072B2", "s"), "CL": ("CL  lag-matched Kalman", "#56B4E9", "D"),
-       "C5S": ("CS  scheduled Kalman", "#000000", "*"), "D": ("D  energy-rate Kalman", "#009E73", "^"), "D2": ("D2  + accelerometer drag", "#CC79A7", "v"),
+       "C5S": ("CS  scheduled Kalman", "#000000", "*"), "CI": ("CI  IMU-aided speed rate", "#B22222", "X"), "D": ("D  energy-rate Kalman", "#009E73", "^"), "D2": ("D2  + accelerometer drag", "#CC79A7", "v"),
        "E": ("E  complementary", "#E69F00", "P")}
 res = {s: A.pipelines(s) for s in ("", "_real", "_trace")}
 fig, ax = plt.subplots(1, 3, figsize=(7.16, 2.6), sharey=True, gridspec_kw={"wspace": 0.08})
@@ -68,7 +68,8 @@ for a, s, cap in zip(ax, ("", "_real", "_trace"), ("(a) nominal sensor model", "
             continue
         x, ex = d[p]["steady"]; y, ey = d[p]["man"]
         a.errorbar(x, y, xerr=ex, yerr=ey, fmt=m, color=c, ms=5 if m != "*" else 8, elinewidth=0.6, capsize=1.2, label=lab if s == "" else None)
-    a.set(xlim=(0.12, 0.40), ylim=(0.2, 0.82), xlabel="Steady-flight RMSE (m/s)")
+    a.set(xlim=(0.10, 0.60), ylim=(0.2, 0.82), xlabel="Steady-flight RMSE (m/s)")
+    a.set_xticks([0.2, 0.3, 0.4, 0.5])
     caption_below(a, cap)
 ax[0].set_ylabel("Speed-change RMSE (m/s)")
 ax[0].legend(loc="upper right", borderpad=0.4, labelspacing=0.25, handletextpad=0.3, fontsize=6.3)

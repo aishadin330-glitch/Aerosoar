@@ -280,12 +280,29 @@ export class Sim {
     if (inLift && !this.truthIn) this.tEnter = this.t;
     this.truthIn = inLift;
 
+    // delay-compensated assignment (cfg.tune.posLag, seconds): a w estimate that lags the air by tau belongs to the position travelled tau earlier
+    const lagC = cfg.tune?.posLag ?? 0;
+    if (lagC > 0) {
+      (this.posHist ??= []).push([this.t, ch.nav.x, ch.nav.y]);
+      while (this.posHist.length > 4 && this.posHist[0][0] < this.t - 10) this.posHist.shift();
+    }
     // thermal estimator at 10 Hz
     if (this.trackActive && this.est && this.vt % 2 === 0) {
       const n = ch.nav;
+      let px = n.x, py = n.y;
+      if (lagC > 0) {
+        const h = this.posHist, tt = this.t - lagC;
+        let i = h.length - 1;
+        while (i > 0 && h[i][0] > tt) i--;
+        if (h[i][0] <= tt && i + 1 < h.length) {
+          const f = (tt - h[i][0]) / (h[i + 1][0] - h[i][0]);
+          px = h[i][1] + f * (h[i + 1][1] - h[i][1]);
+          py = h[i][2] + f * (h[i + 1][2] - h[i][2]);
+        } else { px = h[i][1]; py = h[i][2]; }
+      }
       // 10 Hz samples share filter and gust errors, so R is inflated (×10) rather than treated as independent
       this.est.predict(0.1, n.wu, n.wv);
-      this.est.update(n.x, n.y, this.w, (cfg.tune?.rScale ?? 10) * (this.sig * this.sig + 0.3 * 0.3));
+      this.est.update(px, py, this.w, (cfg.tune?.rScale ?? 10) * (this.sig * this.sig + 0.3 * 0.3));
     }
 
     const cmd = gd.update(dt, this.ctx());

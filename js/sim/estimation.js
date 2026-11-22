@@ -177,6 +177,30 @@ export class EnergyKF extends KF {
   }
 }
 
+/** IMU-aided speed filter: V is propagated with the along-path inertial acceleration, b is its slowly varying bias, the pitot anchors both. */
+export class SpeedKF extends KF {
+  constructor() {
+    super(2);
+    this.vdot = 0;
+    this.reset(AC.Vcruise);
+  }
+  reset(V0) {
+    this.x.set([V0, 0]);
+    this.setDiag([1, 0.05]);
+    this.vdot = 0;
+  }
+  predict(aV, dt) {
+    const x = this.x;
+    this.vdot = aV - x[1];
+    x[0] += this.vdot * dt;
+    const sa = this.sa ?? 0.15, qb = this.qbS ?? 0.05;
+    this.propagate([1, -dt, 0, 1], [sa * sa * dt * dt, 0, 0, qb * qb * dt]);
+  }
+  pitot(z) {
+    this.update(z, this.x[0], [1, 0], NOISE.pitot ** 2);
+  }
+}
+
 /** Airspeed and its rate from the pitot stream (constant-acceleration model). */
 export class AirspeedKF extends KF {
   constructor() {
@@ -194,6 +218,10 @@ export class AirspeedKF extends KF {
     const Q = [(qj * dt ** 3) / 3, (qj * dt * dt) / 2, (qj * dt * dt) / 2, qj * dt];
     this.propagate([1, dt, 0, 1], Q);
     this.update(z, x[0], [1, 0], NOISE.pitot ** 2);
+  }
+  /** Airspeed from GNSS ground velocity minus the wind estimate, projected on the heading; the fix is lat seconds old. */
+  gnssV(z, lat) {
+    this.update(z, this.x[0] - lat * this.x[1], [1, -lat], this.rg ?? 0.15 ** 2);
   }
 }
 
@@ -240,12 +268,18 @@ export class VarioChain {
     this.sA1 = o.sA1 ?? 0.3;
     this.sHold = o.sHold ?? 0.5;
     this.akf.qj = o.qj ?? 0.25;
+    this.akf.rg = o.rg ?? 0.15 ** 2;
+    this.gnssSpeed = o.gnssSpeed === true; // GNSS-aided speed-rate filter
+    this.skf.sa = o.sa ?? 0.15; // IMU-aided speed filter: acceleration noise, bias density, output smoothing time
+    this.skf.qbS = o.qbS ?? 0.05;
+    this.skf.tf = o.tf ?? 0.2;
     this.useGnssAlt = o.gnss !== false;
     this.nav.compensate = o.comp !== false;
   }
   constructor() {
     this.vkf = new VerticalKF();
     this.vkf5 = new VerticalKF5();
+    this.skf = new SpeedKF();
     this.enkf = new EnergyKF();
     this.akf = new AirspeedKF();
     this.nav = new Nav();
@@ -271,6 +305,11 @@ export class VarioChain {
     this.vtPrev = null;
     this.wEn = this.wEnA = this.wComp = this.wKf5 = this.wKfL = this.wKf5L = this.wKfS = this.wKf5S = 0;
     this.sch = 0;
+    this.wKfI = 0;
+    this.skf.reset(g.V);
+    this.pitch = undefined;
+    this.vzF = 0;
+    this.vdotF = 0;
     this.akf.reset(g.V);
     this.nav.reset(g.x, g.y, g.chi);
     this.setFilter(this.filterType, this.fc);
@@ -289,20 +328,34 @@ export class VarioChain {
     this.vkf5.predict(m.az, dt, white, bias);
     this.vc += m.az * dt; // complementary climb rate: integrate the acceleration, the barometer corrects it in onBaro
     if (m.ax !== undefined) this.axLp += (1 - Math.exp(-dt / 0.8)) * (m.ax - this.axLp);
+    if (m.fxb !== undefined && this.pitch !== undefined) {
+      // along-path inertial acceleration: horizontal part from the body-axis specific force and the pitch, vertical part from az
+      const th = this.pitch, V = Math.max(6, this.skf.x[0]);
+      const sg = clamp(this.vkf5.vz / V, -0.5, 0.5), cg = Math.sqrt(1 - sg * sg);
+      const ah = m.fxb * Math.cos(th) + m.fzb * Math.sin(th);
+      this.skf.predict(ah * cg + m.az * sg, dt);
+    }
   }
   onAhrs(m) {
     this.nav.phi = m.phi;
     this.nav.chi = m.chi;
+    if (m.theta !== undefined) this.pitch = m.theta;
   }
   onPitot(m) {
     this.Vraw = m.V;
     this.Vlp += (RATES.pitot === 25 ? 0.22 : 1 - Math.exp((-2 * Math.PI) / RATES.pitot)) * (m.V - this.Vlp); // ~1 Hz one-pole
     this.akf.step(m.V, 1 / RATES.pitot);
+    this.skf.pitot(m.V);
     this.nav.V = this.akf.x[0];
   }
   onGnss(m, t) {
     if (this.useGnssAlt !== false) { this.vkf.gnssAlt(m.h); this.vkf5.gnssAlt(m.h); }
     this.nav.gnss(m, t);
+    if (this.gnssSpeed) {
+      const n = this.nav, lat = n.compensate === false ? 0 : t - m.tAcq;
+      this.akf.gnssV((m.vx - n.wu) * Math.cos(n.chi) + (m.vy - n.wv) * Math.sin(n.chi), lat);
+      n.V = this.akf.x[0];
+    }
   }
   /**
    * Called at the barometer rate. Uses the exact point-mass energy relation
@@ -347,6 +400,12 @@ export class VarioChain {
     this.sch = Math.max(tgt, this.sch * Math.exp(-dt / this.sHold));
     this.wKfS = this.wKf + this.sch * (this.wKfL - this.wKf);
     this.wKf5S = this.wKf5 + this.sch * (this.wKf5L - this.wKf5); // same blend with the drift-rate Kalman filter
+    // CI: drift-rate Kalman climb rate with the IMU-aided speed rate; both terms get the same short smoothing, so their delays match
+    const aF = 1 - Math.exp(-dt / (this.skf.tf ?? 0.2));
+    this.vzF += aF * (this.vkf5.vz - this.vzF);
+    this.vdotF += aF * (this.skf.vdot - this.vdotF);
+    const VI = Math.max(6, this.skf.x[0]);
+    this.wKfI = this.vzF + (VI * this.vdotF) / G + dragSink(VI, phi) * k - thrust;
 
     // D — energy-rate Kalman filter on E = h + V^2/2g; the polar supplies the drag term
     const Vs = Math.max(6, this.Vlp);

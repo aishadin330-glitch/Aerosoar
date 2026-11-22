@@ -2,7 +2,7 @@
 // Frame: local East-North-Up. x east [m], y north [m], h up [m].
 // chi = air-relative heading, measured from +x toward +y [rad]. gam > 0 climbs. phi > 0 turns toward +chi.
 // w > 0 is rising air. All of this is simulator truth and is never handed to an estimator.
-import { G, RHO, D2R, clamp } from './util.js';
+import { G, RHO, D2R, clamp, RNG } from './util.js';
 
 // Blueprint §4.2 starting values (assumptions, not a measured airframe).
 export const AC = {
@@ -75,6 +75,11 @@ export class Glider {
     const D = q * S * CD;
     this.fx = (T - D) / m; // along-track specific force (what a longitudinal accelerometer senses)
     this.CL = CL;
+    // body-axis specific force and pitch for the IMU-aided speed-rate filter (angle of attack from a lift slope of 5 per rad)
+    const al = CL / 5;
+    this.pitch = this.gam + al;
+    this.fxb = (T - D * Math.cos(al) + L * Math.sin(al)) / m;
+    this.fzb = (-D * Math.sin(al) - L * Math.cos(al)) / m;
 
     // air-relative point-mass dynamics (wind-gradient terms neglected, see RESEARCH_PLAN §4)
     const Vdot = (T - D) / m - G * Math.sin(this.gam);
@@ -114,6 +119,8 @@ export class Atmosphere {
     this.driftFactor = 0.9;
     this.g1 = 0;
     this.g2 = 0;
+    this.hgu = 0;
+    this.hgv = 0;
     thermalId = 0;
   }
   /** Meteorological convention: direction the wind blows FROM, degrees clockwise from north. */
@@ -151,6 +158,13 @@ export class Atmosphere {
     const tau = 3.5;
     this.g1 += (-this.g1 / tau) * dt + this.turb * Math.sqrt((2 * dt) / tau) * this.rng.gauss();
     this.g2 += ((this.g1 - this.g2) * dt) / 0.45;
+    // optional horizontal gusts (cfg.hGust = {sigma, tau}): Ornstein-Uhlenbeck wind added to the mean wind, own random stream
+    if (this.hGust) {
+      this.rngH ??= new RNG(((this.rng.next() * 4294967296) >>> 0) ^ 0x9e3779b9);
+      const th = this.hGust.tau ?? 4, sg = this.hGust.sigma;
+      this.hgu += (-this.hgu / th) * dt + sg * Math.sqrt((2 * dt) / th) * this.rngH.gauss();
+      this.hgv += (-this.hgv / th) * dt + sg * Math.sqrt((2 * dt) / th) * this.rngH.gauss();
+    }
   }
   /** Vertical profile: lift fades in above the ground and dies under the layer top. */
   hprof(h) {
@@ -173,7 +187,7 @@ export class Atmosphere {
   }
   sample(x, y, h) {
     const wT = this.thermalW(x, y, h);
-    return { u: this.u, v: this.v, w: wT + this.g2, wT };
+    return { u: this.u + this.hgu, v: this.v + this.hgv, w: wT + this.g2, wT };
   }
   /** Thermal with the largest contribution at (x,y); used for scoring and the oracle only. */
   dominant(x, y, maxDist = 260) {

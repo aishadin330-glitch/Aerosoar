@@ -60,6 +60,8 @@ export class Sensors {
       const dti = dt * Math.round(100 / RATES.imu);
       this.axBias += r2.gauss(0.002) * Math.sqrt(dti);
       out.imu.ax = g.fx + this.axBias + this.noise('accel2', NOISE.accel, ns, cfg);
+      out.imu.fxb = g.fxb + this.axBias + this.noise('accel2', NOISE.accel, ns, cfg);
+      out.imu.fzb = g.fzb + this.rng2.gauss(NOISE.accel * ns);
       // angle-of-attack / mounting error: part of the lift leaks into the along-track specific force, g * error * load factor
       if (cfg.stress?.aoa) out.imu.ax += (G * cfg.stress.aoa * D2R) / Math.max(0.3, Math.cos(g.phi));
       if (cfg.stress?.tilt) {
@@ -71,6 +73,7 @@ export class Sensors {
 
     if (k % 2 === 0) {
       out.ahrs = { t, phi: g.phi + r.gauss(NOISE.phi * ns), chi: g.chi + r.gauss(NOISE.chi * ns) };
+      out.ahrs.theta = g.pitch + this.rng2.gauss(NOISE.phi * ns) + (cfg.stress?.tilt ? this.tilt : 0);
     }
 
     // pitot: scale error, pneumatic lag, noise

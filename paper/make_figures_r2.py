@@ -35,7 +35,7 @@ def caption_below(ax, text, y=-0.30):
 # ------------------------------------------------------------------ detector operating curves (finer grids)
 data = A.load("rev2_detect_kf_0")
 fam = {"thr": ("Threshold (level varied)", "#D55E00", "--", "o"), "fix": ("Fixed CUSUM ($h_0$ varied)", "#0072B2", "-", "s"), "ada": ("Adaptive CUSUM ($h_0$ varied)", "#009E73", "-.", "^")}
-fig, ax = plt.subplots(1, 3, figsize=(7.16, 2.55), sharey=True, gridspec_kw={"wspace": 0.08})
+fig, ax = plt.subplots(1, 3, figsize=(7.16, 2.1), sharey=True, gridspec_kw={"wspace": 0.08})
 for a, turb, cap in zip(ax, (0.2, 0.5, 0.9), ("(a) turbulence 0.2 m/s", "(b) turbulence 0.5 m/s", "(c) turbulence 0.9 m/s")):
     rs = [r for r in data if r["split"] == "test" and r["turb"] == turb]
     for f, (lab, c, ls, m) in fam.items():
@@ -57,7 +57,7 @@ STY = {"B": ("B  Butterworth", "#D55E00", "o"), "C": ("C  Kalman", "#0072B2", "s
        "C5S": ("CS  scheduled Kalman", "#000000", "*"), "CI": ("CI  IMU-aided speed rate", "#B22222", "X"), "D": ("D  energy-rate Kalman", "#009E73", "^"), "D2": ("D2  + accelerometer drag", "#CC79A7", "v"),
        "E": ("E  complementary", "#E69F00", "P")}
 res = {s: A.pipelines(s) for s in ("", "_real", "_trace")}
-fig, ax = plt.subplots(1, 3, figsize=(7.16, 2.6), sharey=True, gridspec_kw={"wspace": 0.08})
+fig, ax = plt.subplots(1, 3, figsize=(7.16, 2.15), sharey=True, gridspec_kw={"wspace": 0.08})
 for a, s, cap in zip(ax, ("", "_real", "_trace"), ("(a) nominal sensor model", "(b) recorded rates and noise level", "(c) recorded noise replayed")):
     d = res[s]
     if not d:
@@ -78,7 +78,7 @@ save(fig, "pipelines2")
 # ------------------------------------------------------------------ latency model of the centre error
 c = A.closed("")
 fit = A.latency_fit(c)
-fig, ax = plt.subplots(figsize=(3.5, 2.6))
+fig, ax = plt.subplots(figsize=(3.5, 2.35))
 fcs = np.array([0.1, 0.2, 0.4, 0.8, 1.5])
 tau = np.sqrt(2) / (2 * np.pi * fcs)
 colr = {"pf|calm": "#0072B2", "pf|tailwind": "#D55E00", "pf|adverse": "#009E73"}

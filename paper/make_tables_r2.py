@@ -60,9 +60,9 @@ body += "\\bottomrule\n\\end{tabular}\n"
 write("pipelines", body)
 
 # ---------------------------------------------------------------- faults and model errors (nominal sensors)
-conds = [("drift", "Barometer drift ramp"), ("pitot", "Pitot scale error 7\\%"), ("gnss", "GNSS outages"), ("polarM", "Drag polar $-20\\%$"), ("polarP", "Drag polar $+20\\%$"),
-         ("tilt1", "Attitude error $1^\\circ$"), ("tilt1B", "Attitude error $1^\\circ$, allowance"), ("aoa05", "Accelerometer alignment $0.5^\\circ$"), ("aoa1", "Accelerometer alignment $1^\\circ$"),
-         ("noise2", "Sensor noise $\\times2$"), ("noise3", "Sensor noise $\\times3$")]
+conds = [("drift", "Barometer drift ramp"), ("pitot", "Pitot scale error 7\\%"), ("polarM", "Drag polar $-20\\%$"), ("polarP", "Drag polar $+20\\%$"),
+         ("tilt1", "Attitude error $1^\\circ$"), ("tilt1B", "Attitude error $1^\\circ$, allowance"), ("aoa1", "Accelerometer alignment $1^\\circ$"),
+         ("noise3", "Sensor noise $\\times3$")]
 cols = ["B", "C", "C5S", "CI", "D", "D2"]
 nom = res[""]["nominal"]
 body = "\\begin{tabular}{@{}l" + "c" * len(cols) + "@{}}\n\\toprule\nCondition & " + " & ".join(LAB[c].split("~")[0] for c in cols) + " \\\\\n\\midrule\n"

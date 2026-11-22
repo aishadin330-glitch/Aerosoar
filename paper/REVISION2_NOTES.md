@@ -8,6 +8,7 @@ Manuscript: `paper/deliverables/AeroSoar_DSP_paper_IEEE_revision2.pdf` (source `
 |---|---|---|
 | Diagnosis of the Kalman speed-change deficit: true-speed-rate diagnostic (Cx), delay matching (CL), scheduled blend (CS) | Sec. IV-B, VIII-B, Table IV, Fig. 1 | `rev2_pipelines*.json` |
 | Drift-rate state, attitude allowance, accelerometer-based drag term and its alignment cost | Sec. IV, VIII-C, Table V | `rev2_pipelines.json` |
+| IMU-aided speed rate (CI: speed Kalman filter on the along-track accelerometer rotated with the attitude, plus the pitot as a measurement) and a GNSS-aided speed rate; test with horizontal gusts | Sec. IV-B, VIII-B, Tables IV and VI | `rev2_pipelines*.json` (conditions `gs`, `gsH05`, `gsH1`, `H05`, `H1`), `rev2_tuneG.json`, `rev2_tuneI.json` |
 | Delay law of the thermal-centre error, e^2 = e0^2 + (kV tau)^2, and delay-compensated assignment | Sec. VI, VIII-F, Fig. 3 | `rev2_closed_*.json`, `rev2_lag_*.json` |
 | Detector operating points at matched false-alarm limits with paired intervals; Monte-Carlo false-alarm intervals; speed-doublet test; sensitivity of the adaptive constants | Sec. VIII-E, Table VI, Fig. 2 | `rev2_detect_*.json`, `rev2_arl.json`, `rev2_variants.json` |
 | Recorded data: sensor check, noise replay in the simulator, replay of 53 min of recorded flight against a GNSS-based reference | Sec. VIII-D, Tables IV and VII | `real_alfa.json`, `rev2_*_trace.json`, `real_replay_summary.json` |
@@ -18,7 +19,7 @@ Manuscript: `paper/deliverables/AeroSoar_DSP_paper_IEEE_revision2.pdf` (source `
 1. *Eq. (1): sign convention and neglected terms.* Stated in Sec. III-B: w positive upward, quasi-steady, small flight-path angle, airspeed in the kinetic term, horizontal-wind acceleration and wind-gradient terms neglected (also absent from the simulator).
 2. *Delay formulas and validation inconsistent.* Closed-form delays are given once (Sec. IV-A); measured delays appear only in the filter table (Table III) and are labelled as such. The "delay-free RMSE" column was removed.
 3. *Accelerometer projection and attitude error.* The simulator now has an attitude error (Gauss-Markov, 1 degree) that leaks into the vertical acceleration as -g tan(phi) dphi. An allowance on the accelerometer-bias state is tested; a white allowance is shown not to help (Sec. IV-B, VIII-C).
-4. *Kalman deficit attributed to an untested hypothesis.* Tested: replacing the speed-rate term by the true value lowers the speed-change error from 0.70 to 0.05 m/s; delay matching restores 0.26 m/s; a combined energy-rate Kalman filter and a complementary filter are included (Table IV).
+4. *Kalman deficit attributed to an untested hypothesis.* Tested: replacing the speed-rate term by the true value lowers the speed-change error from 0.70 to 0.05 m/s; delay matching restores 0.26 m/s; a combined energy-rate Kalman filter and a complementary filter are included (Table IV). A better speed-rate estimate was also tried: the IMU-aided filter CI is the best pipeline in simulation (0.127 steady, 0.311 m/s in speed changes), but it degrades to 0.551/0.496 m/s under replayed accelerometer noise and is not better than the delay-matched pipelines on recorded flights; a GNSS-aided speed rate gave only a 4 % change and is exposed to horizontal gusts.
 5. *Barometer drift is outside the model class.* A drift-rate state (observability rank 5 with GNSS altitude, verified numerically) removes the bias (+0.09 to +0.02 m/s).
 6. *Filter-comparison fairness, 0.4 Hz optimum.* An asymmetric Savitzky-Golay filter (look-ahead = accepted delay) and lead compensation were added; at equal delay the Butterworth filter has no advantage. The closed-loop optimum is shown to differ from the open-loop one, with paired tests (Sec. VIII-F). The dependence of the optimum on the simulated thermal scale and noise is stated as a limitation.
 7. *CUSUM theory.* Monte-Carlo false-alarm intervals on autocorrelated input are given (an AR(1) process reproduces the fixed CUSUM, i.i.d. input does not); the adaptive constants were varied one at a time (43-63 % detection at 0.9 m/s turbulence), so they are reported as hand-set and not optimal.
@@ -27,7 +28,7 @@ Manuscript: `paper/deliverables/AeroSoar_DSP_paper_IEEE_revision2.pdf` (source `
 Questions: (1) the along-track and vertical accelerations are rotated with the attitude in the simulator, and the attitude error enters as above; (2) a combined energy-rate filter (D, D2) is now included, and the along-track accelerometer cannot supply the speed rate (identity shown in Sec. IV-C); (3) yes, the drift-rate state removes the ramp; (4) the 0.4 Hz optimum is specific to the simulated ranges and to open-loop RMSE; (5) the adaptive constants were hand-set, their sensitivity is now reported.
 
 ### Reviewer 2 (experiments and practical impact)
-1. *No real data; shared assumptions.* Added: comparison of the sensor assumptions with the ALFA flights, replay of the recorded barometer and accelerometer noise in the simulator, noise levels unknown to the filters (x2, x3), and a replay of 53 min of recorded flight through the pipelines against an independent GNSS-based reference (Sec. VIII-D). What remains missing: recorded flights with thermals and a true w.
+1. *No real data; shared assumptions.* Added: comparison of the sensor assumptions with the ALFA flights, replay of the recorded barometer and accelerometer noise in the simulator, a noise level three times the modelled one (Table V), and a replay of 53 min of recorded flight through the pipelines against an independent GNSS-based reference (Sec. VIII-D). What remains missing: recorded flights with thermals and a true w.
 2. *Closed-loop claims not statistically supported.* Paired t-tests with Holm adjustment against the default pipeline; comparisons of cutoffs with Bonferroni control over the 10 comparisons made (Sec. VIII-F). The statement about centre error now rests on tests, not on the extreme cutoff.
 3. *Non-monotonic closed-loop results.* The GNSS-delay and pitot-lag sweeps were dropped from the paper (they were within sampling noise); the closed-loop section reports the cutoff and pipeline comparisons that are significant.
 4. *Detector evaluation.* Operating points at two matched false-alarm limits with paired bootstrap intervals; the adaptive detector is shown to be worse in smooth air and better in moderate and strong turbulence; a speed-doublet test checks detection during manoeuvres; Table VI is relabelled.
@@ -45,7 +46,7 @@ Questions: (1) the along-track and vertical accelerations are rotated with the a
 5. *Generalisation.* One aircraft, one polar, Gaussian thermals: stated as limitations.
 
 ### Not done
-Real thermal flights with a true w; thermal profiles beyond Gaussian; comparison with the gust-compensated variometers named by the reviewers; an attitude-error state in the Kalman filter; a working matched-filter detector (the experiment is in the repository and failed to reach useful detection).
+Real thermal flights with a true w (no public dataset with thermals and a reference was found; recorded soaring logs from the authors are needed); an IMU-aided speed rate that withstands recorded accelerometer noise; thermal profiles beyond Gaussian; comparison with the gust-compensated variometers named by the reviewers; an attitude-error state in the Kalman filter; a working matched-filter detector (the experiment is in the repository and failed to reach useful detection).
 
 ## 3. Reproduction
 
@@ -56,7 +57,8 @@ node tests/paper_rev2.mjs tune ; node tests/paper_rev2.mjs tuneS      # tuning o
 node tests/paper_rev2.mjs pipelines                                    # also REAL=1 and TRACE=1
 node tests/paper_rev2.mjs detect kf 0                                  # detect <source> <speed doublet>; MATCHED=1 adds the matched filter
 node tests/paper_rev2.mjs variants ; node tests/paper_rev2.mjs arl
-node tests/paper_rev2.mjs closed pf tailwind ; node tests/paper_rev2.mjs closed pf tailwind kf5s
+node tests/paper_rev2.mjs tuneG ; node tests/paper_rev2.mjs tuneI      # GNSS-aided and IMU-aided speed-rate tuning
+node tests/paper_rev2.mjs closed pf tailwind ; node tests/paper_rev2.mjs closed pf tailwind kf5s ; node tests/paper_rev2.mjs closed pf tailwind ki
 node tests/paper_rev2.mjs lag pf tailwind ; node tests/paper_rev2.mjs artefact
 ```
 
@@ -65,7 +67,7 @@ Recorded data (needs `dataflash.zip` of the ALFA dataset, CC0, extracted to `dat
 ```
 uv run --with pymavlink --with numpy python -I paper/make_noise_traces.py     # noise traces for TRACE=1
 uv run --with pymavlink --with numpy python -I paper/export_alfa_streams.py   # airborne segments
-node tests/real_replay.mjs                                                    # from gui/
+node tests/real_replay.mjs                                                    # from gui/; env TF, SA, QBS, OUT change the filter settings
 python paper/analyze_real_replay.py
 ```
 

@@ -103,6 +103,9 @@ def detect(src, dbl, suf=""):
         return None
     keys = list(data[0]["det"].keys())
     fams = {f: [k for k in keys if k.startswith(f + "|")] for f in ("thr", "fix", "ada")}
+    glr = [k for k in keys if len(k) > 1 and k[0] == "g" and k[1].isdigit()]
+    if glr:
+        fams["glr"] = glr
     res = {}
     for turb in sorted({r["turb"] for r in data}):
         for limit in (5, 2):
@@ -112,6 +115,9 @@ def detect(src, dbl, suf=""):
                 row[f] = dict(key=best, **(b or {}))
             if row["ada"].get("key") and row["thr"].get("key"):
                 row["ada-thr"] = paired_pd_diff(data, turb, row["ada"]["key"], row["thr"]["key"])
+            if row.get("glr", {}).get("key") and row["ada"].get("key"):
+                row["glr-ada"] = paired_pd_diff(data, turb, row["glr"]["key"], row["ada"]["key"])
+                row["glr-thr"] = paired_pd_diff(data, turb, row["glr"]["key"], row["thr"]["key"])
             res[f"{turb}|{limit}"] = row
     return res
 
@@ -155,6 +161,9 @@ def closed(suf=""):
             extra = load(f"rev2_closed_{est}_{cond}_only_kf5s{suf}")
             if extra:
                 data = data + [dict(x, name="C5S scheduled Kalman") for x in extra]
+            lagd = load(f"rev2_lag_{est}_{cond}{suf}")
+            if lagd:
+                data = data + lagd
             g = defaultdict(dict)
             for x in data:
                 g[x["name"]][x["seed"]] = x

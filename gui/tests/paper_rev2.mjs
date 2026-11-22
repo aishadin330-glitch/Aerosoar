@@ -46,12 +46,35 @@ function cusum(adaptive, h0, c = {}) {
     return false;
   } };
 }
+/** Matched-filter (GLR-type) detector: zero-mean rising half-Gaussian template of width sigT, peak at the newest sample, window W seconds;
+ *  the correlation is normalised by its own running standard deviation (60 s), so one threshold is used in every turbulence level. */
+function matched(sigT, thr, W = 12) {
+  const N = Math.round(W / DTB);
+  const s = Array.from({ length: N }, (_, j) => Math.exp(-(((N - 1 - j) * DTB) ** 2) / (2 * sigT * sigT)));
+  const mu = s.reduce((a, b) => a + b, 0) / N;
+  const z = s.map((v) => v - mu);
+  const nrm = Math.sqrt(z.reduce((a, v) => a + v * v, 0));
+  const buf = new Float64Array(N);
+  let head = 0, filled = 0, v = 0.09, lock = 0;
+  return { step(w, dt) {
+    buf[head] = w; head = (head + 1) % N; if (filled < N) filled++;
+    if (filled < N) return false;
+    let c = 0;
+    for (let j = 0; j < N; j++) c += z[j] * buf[(head + j) % N];
+    c /= nrm;
+    v += ((c * c - v) * dt) / 60;
+    if (lock > 0) { lock -= dt; return false; }
+    if (c / Math.sqrt(v) > thr) { lock = 8; return true; }
+    return false;
+  } };
+}
 const THR = [0.6, 0.8, 1, 1.2, 1.5, 1.8, 2, 2.25, 2.5, 2.75, 3];
 const HH = [0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
 const bank = () => {
   const d = {};
   for (const l of THR) d[`thr|${l}`] = threshold(l);
   for (const h of HH) { d[`fix|${h}`] = cusum(false, h); d[`ada|${h}`] = cusum(true, h); }
+  if (process.env.MATCHED === '1') for (const sg of [2, 3, 4]) for (const th of [1.5, 2, 2.5, 3, 3.5, 4, 5, 6]) d[`g${sg}|${th}`] = matched(sg, th);
   return d;
 };
 
@@ -240,6 +263,42 @@ if (mode === 'pipelines') {
       }
   }
   save('rev2_arl', out);
+} else if (mode === 'artefact') {
+  // size of the difference between pipelines, by speed-change stratum, for comparison with the replay of recorded flights
+  cruiseOnly(false);
+  for (const seed of SEEDS) {
+    const cfg = mk('tailwind', seed); cfg.estimator = 'oracle';
+    const sim = new Sim(cfg);
+    const S = { steady: { cl: 0, bl: 0, n: 0 }, man: { cl: 0, bl: 0, n: 0 } };
+    let last = 0, vPrev = sim.glider.V, vd2 = 0, nn = 0;
+    for (let i = 0; i < 300 * 100 && !sim.done; i++) {
+      sim.step();
+      if (sim.vt === last) continue;
+      last = sim.vt;
+      const vd = (sim.glider.V - vPrev) / DTB; vPrev = sim.glider.V;
+      if (sim.t < 15) continue;
+      const ch = sim.chain, s = Math.abs(vd) >= 0.15 ? 'man' : 'steady';
+      S[s].cl += (ch.wKf - ch.wKfL) ** 2; S[s].bl += (ch.wDsp - ch.wKfL) ** 2; S[s].n++;
+      vd2 += vd * vd; nn++;
+    }
+    out.push({ seed, S, vdRms: Math.sqrt(vd2 / nn) });
+  }
+  save('rev2_artefact', out);
+} else if (mode === 'lag') {
+  // closed loop with delay-compensated measurement assignment: posLag = group delay of the Butterworth filter (plus 0.1 s for the speed smoothing)
+  cruiseOnly(false);
+  const est = arg1 || 'pf', cond = arg2 || 'tailwind';
+  for (const fc of [0.1, 0.2, 0.4, 0.8, 1.5])
+    for (const seed of SEEDS) {
+      const cfg = mk(cond, seed); cfg.estimator = est; cfg.source = 'dsp'; cfg.fc = fc;
+      cfg.tune = { posLag: Math.SQRT2 / (2 * Math.PI * fc) + 0.1 };
+      const sim = new Sim(cfg);
+      for (let i = 0; i < 45 * 6000 && !sim.done; i++) sim.step();
+      const m = sim.m;
+      out.push({ est, cond, name: `B fc=${fc} lag-compensated`, seed, arrived: sim.done, t: sim.t, speed: (10000 - sim.guidance.dist) / sim.t, wh: m.motorWh, used: m.used,
+        rejected: m.rejected + m.abandoned, ctr: m.ctrN ? m.ctrSum / m.ctrN : null });
+    }
+  save(`rev2_lag_${est}_${cond}`, out);
 } else if (mode === 'closed') {
   cruiseOnly(false);
   const est = arg1 || 'pf', cond = arg2 || 'tailwind', only = process.argv[5] || '';

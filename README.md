@@ -91,3 +91,7 @@ cd gui
 REAL=1 node tests/paper_rev.mjs roc      # also: stress, "latency fc", "kalman on"
 cd .. && python paper/analyze_real_sim.py
 ```
+
+## Second revision (recorded-flight replay, delay compensation)
+
+`paper/REVISION2_NOTES.md` lists every new experiment with its command, the result files it writes and the table or figure of the paper it supports, and answers the reviews point by point. The recorded-flight replay (`gui/tests/real_replay.mjs`, `paper/export_alfa_streams.py`, `paper/analyze_real_replay.py`) needs the ALFA `dataflash.zip` (CC0), which is not part of this repository. The noise traces extracted from it (`paper/results/alfa_noise_traces.json`) are included.

@@ -1,0 +1,21 @@
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+ & & \multicolumn{2}{c}{$\le5$ false alarms per hour} & \multicolumn{2}{c}{$\le2$ false alarms per hour} \\
+Turbulence & Detector & detection (\%) & false alarms/h & detection (\%) & false alarms/h \\
+\midrule
+0.2~m/s & Threshold & 97.2 [95.7, 98.6] & 1.3 [0.7, 2.0] & 97.2 [95.6, 98.4] & 1.3 [0.7, 2.0] \\
+ & Fixed CUSUM & 98.6 [97.5, 99.5] & 2.3 [1.4, 3.2] & 97.7 [96.4, 98.8] & 0.3 [0.0, 0.7] \\
+ & Adaptive CUSUM & 91.9 [89.9, 93.8] & 0.0 [0.0, 0.0] & 91.9 [89.8, 93.9] & 0.0 [0.0, 0.0] \\
+ & \textit{adaptive $-$ threshold} & \multicolumn{2}{c}{-5.3 [-7.1, -3.6] points} & \multicolumn{2}{c}{-5.3 [-7.1, -3.5] points} \\
+\midrule
+0.5~m/s & Threshold & 79.9 [77.1, 82.6] & 1.8 [1.0, 2.6] & 67.4 [64.3, 70.3] & 0.2 [0.0, 0.5] \\
+ & Fixed CUSUM & 86.2 [83.7, 88.8] & 2.2 [1.4, 3.1] & 82.5 [79.5, 85.4] & 1.5 [0.8, 2.3] \\
+ & Adaptive CUSUM & 87.1 [84.6, 89.5] & 2.9 [1.8, 4.1] & 78.8 [76.1, 81.7] & 0.8 [0.3, 1.5] \\
+ & \textit{adaptive $-$ threshold} & \multicolumn{2}{c}{+7.2 [+5.0, +9.5] points} & \multicolumn{2}{c}{+11.5 [+9.2, +13.9] points} \\
+\midrule
+0.9~m/s & Threshold & 45.5 [41.7, 49.3] & 1.3 [0.7, 2.0] & 33.7 [29.8, 37.5] & 0.5 [0.1, 1.0] \\
+ & Fixed CUSUM & \multicolumn{2}{c}{none meets the limit} & \multicolumn{2}{c}{none meets the limit} \\
+ & Adaptive CUSUM & 54.0 [50.1, 58.0] & 2.0 [1.1, 3.0] & 45.7 [41.7, 49.6] & 1.9 [1.0, 2.9] \\
+ & \textit{adaptive $-$ threshold} & \multicolumn{2}{c}{+8.5 [+5.6, +11.3] points} & \multicolumn{2}{c}{+12.0 [+8.4, +15.5] points} \\
+\bottomrule
+\end{tabular}

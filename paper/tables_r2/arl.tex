@@ -1,0 +1,14 @@
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+ & & \multicolumn{3}{c}{Fixed CUSUM} & \multicolumn{2}{c}{Adaptive CUSUM} \\
+Turbulence & $h_0$ & simulator & AR(1) & i.i.d. & simulator & AR(1) \\
+\midrule
+0.5~m/s ($\phi=0.977$) & 1.5 & 124 & 121 & none & 1237 & 6996 \\
+ & 3 & 345 & 447 & none & 11k & none \\
+ & 6 & 1618 & 10k & none & none & none \\
+\midrule
+0.9~m/s ($\phi=0.991$) & 1.5 & 36 & 39 & none & 189 & 143 \\
+ & 3 & 62 & 59 & none & 539 & 396 \\
+ & 6 & 132 & 113 & none & 4206 & 1312 \\
+\bottomrule
+\end{tabular}

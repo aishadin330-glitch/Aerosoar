@@ -93,7 +93,7 @@ for key in ("pf|calm", "pf|tailwind", "pf|adverse"):
     if all(f"B fc={f} lag-compensated" in c[key] for f in fcs):
         yc = [c[key][f"B fc={f} lag-compensated"]["ctr"][0] for f in fcs]; ec = [c[key][f"B fc={f} lag-compensated"]["ctr"][1] for f in fcs]
         ax.errorbar(tau * 1.04, yc, yerr=ec, fmt="s", ms=3.3, mfc="white", color=colr[key], capsize=1.5, elinewidth=0.6)
-ax.set(xlabel="Butterworth group delay $\\tau$ (s)", ylabel="Thermal-centre error (m)", xscale="log", xlim=(0.08, 2.6), ylim=(8, 82))
+ax.set(xlabel="Butterworth group delay $\\tau$ (s)", ylabel="Thermal-centre error (m)", xscale="log", xlim=(0.08, 2.6), ylim=(8, 90))
 ax.set_xticks([0.1, 0.2, 0.5, 1, 2]); ax.set_xticklabels(["0.1", "0.2", "0.5", "1", "2"])
-ax.legend(loc="upper left", title="particle filter, 30 flights", title_fontsize=6.5, borderpad=0.4)
+ax.legend(loc="upper center", ncol=3, title="particle filter, 30 flights", title_fontsize=6.5, borderpad=0.4, columnspacing=1.2, handletextpad=0.3)
 save(fig, "ctrfit")

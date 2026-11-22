@@ -1,0 +1,14 @@
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Filter & Delay (s) & RMSE (m/s) \\
+\midrule
+Butterworth, 0.4 Hz & 0.56 & 0.224$\pm$0.004 \\
+Bessel, 0.4 Hz & 0.54 & 0.232$\pm$0.003 \\
+Moving average, 0.4 Hz & 0.53 & 0.276$\pm$0.002 \\
+One-pole, 0.4 Hz & 0.40 & 0.417$\pm$0.002 \\
+Butterworth + lead compensation (0.2 s) & 0.36 & 0.258$\pm$0.003 \\
+Causal Savitzky--Golay, 3 s, $p=2$ & 0.00 & 0.269$\pm$0.005 \\
+Asymmetric Savitzky--Golay, 2 s, $p=2$ & 0.75 & 0.224$\pm$0.004 \\
+Asymmetric Savitzky--Golay, 3 s, $p=3$ & 0.50 & 0.226$\pm$0.004 \\
+\bottomrule
+\end{tabular}

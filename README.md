@@ -70,7 +70,7 @@ Code is released under the MIT licence (see `LICENSE`). The bundled three.js lib
 
 ## Citation
 
-If you use this code, please cite the paper and the archived release (DOI to be added).
+If you use this code, please cite the paper and the archived release: AeroSoar v1.0.0, [https://doi.org/10.5281/zenodo.24621518](https://doi.org/10.5281/zenodo.24621518) (all versions: [https://doi.org/10.5281/zenodo.24621517](https://doi.org/10.5281/zenodo.24621517)).
 
 ## Check against recorded flights
 

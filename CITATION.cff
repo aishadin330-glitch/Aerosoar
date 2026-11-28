@@ -16,6 +16,7 @@ authors:
 repository-code: "https://github.com/aishadin330-glitch/Aerosoar"
 url: "https://aishadin330-glitch.github.io/Aerosoar/"
 license: MIT
+doi: "10.5281/zenodo.24621518"
 version: "1.0.0"
 date-released: "2026-11-28"
 keywords:

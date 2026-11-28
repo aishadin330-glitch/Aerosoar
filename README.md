@@ -64,6 +64,10 @@ Ground truth (`physics.js`) is kept separate from everything the estimators see:
 
 The JavaScript implementation is a prototype. Sensor noise is white or first-order coloured Gaussian, the thermal model is a Gaussian updraft, and all parameters are assumed values listed in the paper. Validation on recorded flight data has not been done.
 
+## How the code was made
+
+The code in this repository was developed with AI-assisted coding ("vibe coding").
+
 ## Licence
 
 Code is released under the MIT licence (see `LICENSE`). The bundled three.js library in `gui/vendor` keeps its own licence.

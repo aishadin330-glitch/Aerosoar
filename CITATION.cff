@@ -4,11 +4,11 @@ title: "AeroSoar: simulation environment and experiment code for causal signal p
 abstract: "Simulation environment and experiment code for the study Causal Signal Processing for Vertical Air Velocity Estimation and Thermal Detection in Autonomous Soaring Gliders: A Simulation Study. The project is simulation-first: results use assumed aircraft, atmosphere and sensor models, and no claim of flight readiness is made. No flight data are included."
 type: software
 authors:
-  - family-names: "Islam"
-    given-names: "Md. Azharul"
-    affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
   - family-names: "Shadin"
     given-names: "Asiq Iqbal"
+    affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
+  - family-names: "Islam"
+    given-names: "Md. Azharul"
     affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
   - family-names: "Hamim"
     given-names: "Sajidur Rahman"

@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "AeroSoar: simulation environment and experiment code for causal signal processing of vertical air velocity in autonomous soaring gliders"
+abstract: "Simulation environment and experiment code for the study Causal Signal Processing for Vertical Air Velocity Estimation and Thermal Detection in Autonomous Soaring Gliders: A Simulation Study. The project is simulation-first: results use assumed aircraft, atmosphere and sensor models, and no claim of flight readiness is made. No flight data are included."
+type: software
+authors:
+  - family-names: "Islam"
+    given-names: "Md. Azharul"
+    affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
+  - family-names: "Shadin"
+    given-names: "Asiq Iqbal"
+    affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
+  - family-names: "Hamim"
+    given-names: "Sajidur Rahman"
+    affiliation: "Department of Avionics Engineering, Aviation and Aerospace University, Bangladesh"
+repository-code: "https://github.com/aishadin330-glitch/Aerosoar"
+url: "https://aishadin330-glitch.github.io/Aerosoar/"
+license: MIT
+version: "1.0.0"
+date-released: "2026-11-28"
+keywords:
+  - soaring gliders
+  - vertical air velocity estimation
+  - thermal detection
+  - Kalman filter
+  - signal processing
+  - simulation
